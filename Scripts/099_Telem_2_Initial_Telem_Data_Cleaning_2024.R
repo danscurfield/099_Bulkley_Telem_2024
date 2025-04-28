@@ -11,12 +11,15 @@ rm(list=ls(all=TRUE))
 library(tidyverse)
 library(IFRthemes)
 library(lubridate)
+library(dplyr)
 
 # Make all times UTC and avoid auto re-display of timezone
 Sys.setenv(TZ = "UTC") 
 
 
 # Functions -------------------------------------------------------------------
+
+#Function to read-in Orion data
 
 # Modification of function used for reading in 2021 Orion data.
 # Chose not to use the start.date argument and will filter by 
@@ -36,39 +39,139 @@ uploadOrion <- function(path) {
     dplyr::select(date, dateTime, station, freqCode, code = Code, power = Power)
 }
 
+
+#Function to read-in SRX1200 or SRX800 data
+
+# Function to load radio telemetry data from a daily download folder
+# Created 2020 by Annika then modified over the years by Katrina and Pete
+# Modified 20240116 to work for both SRX800 and 1200 
+
+# Works with SRX800 and SRX1200
+# Works for both .TXT and .DTA files (can even be at in the same folder)
+
+# Function Inputs:
+# data: the folder with the radio files to be uploaded
+
+
+# Required packages
+#library(dplyr) - included above
+
+srxUpload <- function(path) {
+  
+  files <- list.files(path = path)
+  full.files <- list.files(path = path,
+                           full.names = TRUE)
+  
+  # Pull the station number from the file names "F39_2022..." becomes "39"
+  stations <- substr(files, 
+                     start = 1,
+                     stop = 6)
+  
+  # Determine the lines containing header data by finding "ID Only Records"
+  skip <- full.files %>% 
+    purrr::map(readLines) %>% 
+    # Determine which lines to skip by selecting the line with Date (the row with col names)
+    purrr::map(grep, pattern = "*ID Only Records*") %>% 
+    unlist
+  
+  skipLines <- skip + 2
+  
+  # Create a function to read in the data files and skip the file-specific line
+  ReadFun <- function(a, b, c, d) {
+    read.table(a,
+               skip = b,
+               header = FALSE,
+               fill = TRUE,
+               stringsAsFactors = FALSE,
+               skipNul = TRUE,
+               col.names = c("Date",
+                             "Time",
+                             "Channel",
+                             "TagID",
+                             "Antenna",
+                             "Power",
+                             "Latitude",
+                             "Longitude")) %>% 
+      mutate(Station = c,
+             File = d) 
+  }
+  
+  # Use pmap to apply the ReadFun to all files 
+  # pmap essentially creates a list where:
+  # element 1: ReadFun(a = full.files[1], b = skipLines[1], c = stations[1], d = files[1])
+  # element 2: ReadFun(a = full.files[2], b = skipLines[2], c = stations[2], d = files[2]), etc.
+  dat0 <- purrr::pmap(list(full.files, skipLines, stations, files),
+                      ReadFun)
+  
+  # Turn the list into a data.frame
+  dat1 <- dat0 %>% 
+    data.table::rbindlist(., fill = TRUE)  
+  
+  # Manipulate the data frame
+  dat2 <- dat1 %>% 
+    # Remove the column containing: "End of data" by filtering for NA TagIDs
+    filter(!is.na(TagID)) %>% 
+    mutate(Date = lubridate::mdy(Date, tz = "MST")) %>% 
+    mutate(Hour = lubridate::hour(lubridate::hms(Time))) %>% 
+    mutate(datetime = paste(Date, Time)) %>% 
+    # Rename stations
+    mutate(site.desc = suppressWarnings(forcats::fct_recode(as.factor(Station),
+                                                            "33: Mainstem 2" = "33",
+                                                            "34: Approach RB" = "34",
+                                                            "35: Approach LB" = "35",
+                                                            "36: Cofferdam" = "36",
+                                                            "37: Tunnel Outlet" = "37",
+                                                            "38: Entrance Aerial" = "38",
+                                                            "39: Entrance Dipole" = "39",
+                                                            "40: Entrance Pool Dipole" = "40",
+                                                            "42: Cell 8 Dipole" = "42",
+                                                            "41: Turning Basin Dipole" = "41",
+                                                            "43: Vee-Trap Dipole" = "43",
+                                                            "46: Tunnel Inlet" = "46",
+                                                            "48: Entrance Dipole" = "48",
+                                                            "49: Entrance Pool Dipole" = "49",
+                                                            "99: TEST" = "99")))  %>% 
+    # Remove error codes and test tags
+    filter(!(TagID == 999))
+  # filter(!(TagID == 728| TagID == 727))
+  
+  return(dat2)
+  
+}
+
+
 # Read In Data ----------------------------------------------------------------
 
 # Read in tagging data and format dates and times
-tagData <- read.csv("Data Input/099_Tag_Metadata_2023.csv", 
-                    header = TRUE, 
-                    stringsAsFactors = FALSE) %>%
-  mutate_all(~str_replace_all(., "unknown", "")) %>%
-  mutate(date = mdy(date),
-         tagDateTime = as.POSIXct(paste0(date, time, sep = " "), 
-                                  format="%Y-%m-%d %H:%M"),
-         freq = paste("149.", freq, sep = ""),
-         freqCode = paste(freq, code, sep = " ")) %>%
-  dplyr::select(tagDateTime, freqCode, sex, forkLength) %>%
-  # filter out recaptured fish
-  filter(!(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 41"),
-         !(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 42"),
-         !(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 45"),
-         !(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 46"),
-         !(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 45"),
-         !(tagDateTime == "2023-07-10 10:56:00" & freqCode == "149.48 50")) %>%
-  #filter out tags with missing data
-  filter(!(freqCode == "149.42 NA"),
-         !(freqCode == "149.48 3?"),
-         !(freqCode == "149.48 49?"),
-         !(freqCode == "149.48 NA"),
-         !freqCode == "149.42 ")%>%
-  #filter our tags not assigned
-  filter(!(is.na(tagDateTime)))
+tagData <- read_csv("Data Input/tagData.csv")
+
 
 # Read in mobile telemetry data. 
 # This data was manually converted from txt to csv using Excel.
 # All the extra info was also deleted using Excel so that just the detection data was left.
 ## Remove test tag data to not skew detection accuracy calculation
+
+mobileData <- srxUpload(path = "Data Input/Radio Downloads/Mobile") %>%
+  rename(date = Date,
+         time = Time,
+         dateTime = datetime,
+         code = TagID,
+         power = Power, 
+         station = Station, 
+         latitude = Latitude,
+         longitude = Longitude)
+         
+
+  mutate(dateTime = datetime,
+         code = TagID)
+  
+
+  
+  #channel 1 is 500
+  #channel 2 is 320
+  #channel 3 is 340
+  
+  #manually delete row 567, 64, 65, 66.
 
 mobileData <- read.csv("Data Input/Radio Downloads/Mobile/099_Mobile_Telemetry_formatted_2023.csv", 
                        header = TRUE, 
