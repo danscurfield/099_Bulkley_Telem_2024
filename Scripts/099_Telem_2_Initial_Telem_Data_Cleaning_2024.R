@@ -24,21 +24,25 @@ Sys.setenv(TZ = "UTC")
 # Modification of function used for reading in 2021 Orion data.
 # Chose not to use the start.date argument and will filter by 
 # tag datetime for each tag specifically later on.
+
 uploadOrion <- function(path) {
-  tempfile <- dir(path=path, full.names = TRUE)
-  tempdat <- tempfile %>% 
-    map(read.table, header=TRUE, stringsAsFactors=FALSE) %>% 
+  tempfile <- dir(path = path, full.names = TRUE)
+  
+  tempdat <- map2(tempfile, basename(tempfile), ~ {
+    read.table(.x, header = TRUE, stringsAsFactors = FALSE) %>%
+      mutate(File = .y)
+  }) %>%
     reduce(rbind) %>%
-    mutate(station = as.character(Site),
+    mutate(Freq = format(Freq, nsmall = 3),
+           station = as.character(Site),
            date = lubridate::ymd(Date),
            dateTime = as.POSIXct(paste0(date, Time, sep = " ")),
-           code = ifelse(Code < 10, paste0("0",Code), as.character(Code)),
+           code = sprintf("%03d", Code),
            freqCode = paste(Freq, code, sep = " ")) %>%
     distinct(freqCode, dateTime, .keep_all = TRUE) %>%
     filter(date >= "2023-07-04") %>%
-    dplyr::select(date, dateTime, station, freqCode, code = Code, power = Power)
+    dplyr::select(date, dateTime, station, freqCode, code = Code, power = Power, File)
 }
-
 
 #Function to read-in SRX1200 or SRX800 data
 
@@ -114,23 +118,24 @@ srxUpload <- function(path) {
     mutate(Date = lubridate::mdy(Date, tz = "MST")) %>% 
     mutate(Hour = lubridate::hour(lubridate::hms(Time))) %>% 
     mutate(datetime = paste(Date, Time)) %>% 
+    mutate(TagID = sprintf("%03d", TagID)) %>%
     # Rename stations
-    mutate(site.desc = suppressWarnings(forcats::fct_recode(as.factor(Station),
-                                                            "33: Mainstem 2" = "33",
-                                                            "34: Approach RB" = "34",
-                                                            "35: Approach LB" = "35",
-                                                            "36: Cofferdam" = "36",
-                                                            "37: Tunnel Outlet" = "37",
-                                                            "38: Entrance Aerial" = "38",
-                                                            "39: Entrance Dipole" = "39",
-                                                            "40: Entrance Pool Dipole" = "40",
-                                                            "42: Cell 8 Dipole" = "42",
-                                                            "41: Turning Basin Dipole" = "41",
-                                                            "43: Vee-Trap Dipole" = "43",
-                                                            "46: Tunnel Inlet" = "46",
-                                                            "48: Entrance Dipole" = "48",
-                                                            "49: Entrance Pool Dipole" = "49",
-                                                            "99: TEST" = "99")))  %>% 
+    # mutate(site.desc = suppressWarnings(forcats::fct_recode(as.factor(Station),
+    #                                                         "33: Mainstem 2" = "33",
+    #                                                         "34: Approach RB" = "34",
+    #                                                         "35: Approach LB" = "35",
+    #                                                         "36: Cofferdam" = "36",
+    #                                                         "37: Tunnel Outlet" = "37",
+    #                                                         "38: Entrance Aerial" = "38",
+    #                                                         "39: Entrance Dipole" = "39",
+    #                                                         "40: Entrance Pool Dipole" = "40",
+    #                                                         "42: Cell 8 Dipole" = "42",
+    #                                                         "41: Turning Basin Dipole" = "41",
+    #                                                         "43: Vee-Trap Dipole" = "43",
+    #                                                         "46: Tunnel Inlet" = "46",
+    #                                                         "48: Entrance Dipole" = "48",
+    #                                                         "49: Entrance Pool Dipole" = "49",
+    #                                                         "99: TEST" = "99")))      %>% 
     # Remove error codes and test tags
     filter(!(TagID == 999))
   # filter(!(TagID == 728| TagID == 727))
@@ -159,41 +164,23 @@ mobileData <- srxUpload(path = "Data Input/Radio Downloads/Mobile") %>%
          power = Power, 
          station = Station, 
          latitude = Latitude,
-         longitude = Longitude)
+         longitude = Longitude) %>%
+  mutate(frequency = case_when( #convert channel numbers to frequency values
+    Channel == 1 ~ "149.500",
+    Channel == 2 ~ "149.320",
+    Channel == 3 ~ "149.340",
+    TRUE ~ "other")) %>%
+  mutate(freqCode = paste(frequency, code, sep = " ")) %>% #cr4eate frewqcode column among others. 
+  dplyr::select(date, dateTime, station, freqCode, code, power, latitude, longitude)
          
-
-  mutate(dateTime = datetime,
-         code = TagID)
   
-
-  
-  #channel 1 is 500
-  #channel 2 is 320
-  #channel 3 is 340
-  
-  #manually delete row 567, 64, 65, 66.
-
-mobileData <- read.csv("Data Input/Radio Downloads/Mobile/099_Mobile_Telemetry_formatted_2023.csv", 
-                       header = TRUE, 
-                       stringsAsFactors = FALSE) %>%
-  mutate(date = mdy(Date),
-       dateTime = as.POSIXct(paste0(date, Time, sep = " "), format="%Y-%m-%d %H:%M"),
-       code = ifelse(TagID.BPM < 10, paste0("0",TagID.BPM), as.character(TagID.BPM)),
-       freqCode = paste(Freq..MHz., code, sep = " "),
-       station = "Mobile",
-       method = "Mobile") %>%
-  filter(dateTime >= "2023-07-04" & dateTime <= "2023-10-26") %>%
-  filter(!(freqCode == "149.5 212")) %>% #remove test tag (149.5 212)
-  dplyr::select(date, dateTime, station, method, freqCode, freq = Freq..MHz., code = TagID.BPM, 
-         power = RSSI, lat = Latitude, long = Longitude)
-
+  #Unfortunately it appears the mobile scans were not monitoring the 149.340 frequency
 
 # Read in fixed station data, combine, and add location and rkm info
 station1 <- uploadOrion(path = "Data Input/Radio Downloads/Station1")
 station2 <- uploadOrion(path = "Data Input/Radio Downloads/Station2")
 station4 <- uploadOrion(path = "Data Input/Radio Downloads/Station4")
-station5 <- uploadOrion(path = "Data Input/Radio Downloads/Station5") %>%
-  mutate(station = 5)
+station5 <- uploadOrion(path = "Data Input/Radio Downloads/Station5")
 station6 <- uploadOrion(path = "Data Input/Radio Downloads/Station6") %>%
   mutate(station = 6)
 
@@ -201,7 +188,9 @@ station6 <- uploadOrion(path = "Data Input/Radio Downloads/Station6") %>%
 ## Remove test tag data to not skew detection accuracy calculation
 
 fixedData <- rbind(station1, station2, station4, station5, station6) %>%
-  filter(!(freqCode == "149.5 212")) %>% #remove test tag (149.5 212)
+  filter(!(freqCode == "149.500 212")) %>% #remove test tag 212
+  filter(!(freqCode == "149.500 211")) %>% #remove test tag 211
+  filter(!(date <= "2024-07-03")) %>%
   mutate(waterbody = case_when(station == "1" ~ "Bulkley River",
                               station == "2" ~ "Bulkley River",
                               station == "4" ~ "Nanika River",
