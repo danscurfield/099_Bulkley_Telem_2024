@@ -19,7 +19,7 @@ Sys.setenv(TZ = "UTC")
 # Read In Data ----------------------------------------------------------------
 
 # Read in tagging data and format dates and times
-tagData <- read.csv("Data Input/099_Tag_Metadata_2024.csv", 
+tagData <- read.csv("Data Input/099_2024_TagData.csv", 
                     header = TRUE, 
                     stringsAsFactors = FALSE, na.strings = c("","unkn", "NA")) %>%
   mutate(date = Date,
@@ -28,12 +28,13 @@ tagData <- read.csv("Data Input/099_Tag_Metadata_2024.csv",
          code = Tag.Number,
          sex = Gender,
          forkLength = Length) %>%
+  mutate(code = sprintf("%03d", code)) %>%
   #Make all sex data upper case
   mutate(sex = str_to_upper(sex)) %>%
   #Manually input tags with missing frequency data
   mutate(freq = case_when(
-    code == "19" ~ 500,  #code 19 only detected on 149.500
-    code == "88" ~ 500,  #code 88 only detected on 149.500
+    code == "019" ~ 500,  #code 19 only detected on 149.500
+    code == "088" ~ 500,  #code 88 only detected on 149.500
     code == "199" ~ 320,  #code 199 only detected on 149.320
     code == "193" ~ 320,  #code 193 only detected on 149.320
     code == "192" ~ 320,  #code 192 only detected on 149.320
@@ -43,8 +44,9 @@ tagData <- read.csv("Data Input/099_Tag_Metadata_2024.csv",
     TRUE ~ freq)) %>%
   #Manually input date for tags with missing tagging date
   # Tag 149.500 13
-  mutate(date = case_when(
-    code == "13" & freq == "500" ~ "2024-07-12", #earliest date of tagging
+  mutate(date = lubridate::ymd(date),
+         date = case_when(
+    code == "013" & freq == "500" ~ as.Date("2024-07-12"), #earliest date of tagging
     TRUE ~ date)) %>%
   #Make tagDateTime and freqCode columns
   mutate(tagDateTime = as.POSIXct(paste0(date, time, sep = " "), 
@@ -54,9 +56,19 @@ tagData <- read.csv("Data Input/099_Tag_Metadata_2024.csv",
   dplyr::select(tagDateTime, freqCode, sex, forkLength) %>%
   # filter out recaptured fish - no recaptured fish in 2024
   #filter out tags with missing data - solved by sleuthing detection data
-  #filter our tags not assigned
+  #filter out tags not assigned
   filter(!(is.na(tagDateTime)))  %>%
   distinct(freqCode, .keep_all = TRUE) 
+
+#duplicate fish 
+#149.500 089
+#149.500 133
+#149.500 134
+
+# tagData %>% #used to confirm no duplicates
+#   group_by(freqCode) %>%
+#   filter(n() > 1) %>%
+#   arrange(freqCode)
 
 #Save cleaned tag data
 write_csv(tagData, "Data Input/tagData.csv")
