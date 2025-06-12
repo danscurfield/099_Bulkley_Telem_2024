@@ -1,6 +1,7 @@
 # Read in cleaned mobile tracking data and assign RKMs to each detection
 # Created by Pete Moniz - winter 2023
 # Updated by Dan Scurfield - Feb 2024
+# Updated by Dan Scurfield - Jun 2025
 
 # Initial Setup ---------------------------------------------------------------
 
@@ -35,7 +36,7 @@ rkmPoints <- readOGR(dsn = "Data Input/Mapping", layer = "099_rkm_pts")
 # Read in initially cleaned mobile data.
 # This data will still need a bit of cleaning once we add rkms and combine it
 # with the fixed telemetry data.
-mobileDataCleaned <- read.csv("Data Output/099_MobileTrackingData_1_InitialClean_2023.csv", 
+mobileDataCleaned <- read.csv("Data Output/099_MobileTrackingData_1_InitialClean_2024.csv", 
                               header = TRUE, 
                               stringsAsFactors = FALSE) %>%
   # Make an ID to double check that rkm's and detection points match up at the end.
@@ -49,10 +50,10 @@ mobileDataCleaned <- read.csv("Data Output/099_MobileTrackingData_1_InitialClean
 
 # First make a new simplified mobile detection dataframe
 mobileDataPoints <- mobileDataCleaned %>%
-  dplyr::select(detID, lat, long, dateTime, freqCode)
+  dplyr::select(detID, latitude, longitude, dateTime, freqCode)
 
 # Turn the data into a spatial points dataframe
-coordinates(mobileDataPoints) <- c("long", "lat")
+coordinates(mobileDataPoints) <- c("longitude", "latitude")
 
 # Assign coordinate system. This is a pretty standard datum that 
 # I assumed is what Lotek collects their data in. I double checked this
@@ -114,5 +115,5 @@ mobileDataCleanedRKM <- data.frame(rkmID, mobileDataCleaned, rkm, waterbody) %>%
 # Write out a new csv to merge with the cleaned fixed station data for further
 # filtering and plotting.
 write.csv(mobileDataCleanedRKM, 
-          file = "Data Output/099_MobileTrackingData_2_InitialClean_RKM_2023.csv")
+          file = "Data Output/099_MobileTrackingData_2_InitialClean_RKM_2024.csv")
 
