@@ -2,6 +2,7 @@
 # Read in filtered data and summarize fish movements
 # Created by Pete Moniz - winter 2023
 # Updated by Dan Scurfield - February 2024
+# Updated by Dan Scurfield - June 2024
 
 # Initial Setup ---------------------------------------------------------------
 
@@ -20,49 +21,27 @@ options(scipen = 999)
 
 # Read In Data ----------------------------------------------------------------
 
-detData <- read.csv("Data Output/099_AllData_FinalCleaned_2023.csv", 
+detData <- read.csv("Data Output/099_AllData_FinalCleaned_2024.csv", 
                      header = TRUE, 
                      stringsAsFactors = FALSE) %>%
   # Only use variables we need.
   dplyr::select(dateTime, date, freqCode, rkm, method, waterbody, station, tagDateTime, sex, forkLength) %>%
   mutate(dateTime = ymd_hms(dateTime))
 
-  
-  tagData <- read.csv("Data Input/099_Tag_Metadata_2023.csv", 
-                      header = TRUE, 
-                      stringsAsFactors = FALSE, na.strings = c("","unknown", "NA")) %>%
-  mutate(date = mdy(date),
-         tagDateTime = as.POSIXct(paste0(date, time, sep = " "), 
-                                  format="%Y-%m-%d %H:%M"),
-         #code = ifelse(code < 10, paste0("0",code), as.character(code)),
-         freq = paste("149.", freq, sep = ""),
-         freqCode = paste(freq, code, sep = " "),
-         code = as.numeric(code), # 2 tag code numbers have "?"
+tagData <- read_csv("Data Input/tagData.csv") %>%
+  mutate(date = ymd(tagDateTime),
+         tagDateTime = as.POSIXct(tagDateTime),
          dateTime = tagDateTime,
+         code = sub(".* ", "", freqCode),
          rkm = 0,
          waterbody = "Tagging",
          method = "Tagging",
          station = "Tagging",
-         power = NA,
-         lat = NA,
-         long = NA) %>%
-  dplyr::select(date, dateTime, freqCode, code, power, waterbody, rkm, method, station,
-                tagDateTime, sex, forkLength, lat, long) %>%
-    # filter out recaptured fish
-    filter(!(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 41"),
-           !(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 42"),
-           !(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 45"),
-           !(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 46"),
-           !(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 45"),
-           !(tagDateTime == "2023-07-10 10:56:00" & freqCode == "149.48 50")) %>%
-    #filter out tags with missing data
-    filter(!(freqCode == "149.42 NA"),
-           !(freqCode == "149.48 3?"),
-           !(freqCode == "149.48 49?"),
-            !(freqCode == "149.48 NA"))
-    # #filter out tags that were not deployed
-    # filter(!(is.na(tagDateTime)))
-
+         power = NA, 
+         longitude = -127.3283,
+         latitude = 55.0146) %>%
+  dplyr::select(date, tagDateTime, dateTime, freqCode, code, rkm, waterbody, 
+                method, station, power, sex, forkLength, latitude, longitude)  
 
 
 # Detection Efficiency --------------------------------------------------------
@@ -74,35 +53,35 @@ detData <- read.csv("Data Output/099_AllData_FinalCleaned_2023.csv",
 station2dets <- detData %>% filter(rkm == 42) %>% count(freqCode)
 station2USdets <- detData %>% filter(rkm >= 42) %>% count(freqCode)
 
-nrow(station2dets)/nrow(station2USdets)*100 # 52.2%
+nrow(station2dets)/nrow(station2USdets)*100 # 93.4%
 
 # Morice Lake
 station6dets <- detData %>% filter(rkm == 201) %>% count(freqCode)
 station6USdets <- detData %>% filter(rkm >= 201) %>% count(freqCode)
 
-nrow(station6dets)/nrow(station6USdets)*100 # 1.8%
+nrow(station6dets)/nrow(station6USdets)*100 # 85.8%
 
 # Nanika River
 station4dets <- detData %>% filter(rkm == 214 & waterbody == "Nanika River") %>% count(freqCode)
 station4USdets <- detData %>% filter(rkm >= 214 & waterbody == "Nanika River") %>% count(freqCode)
 
-nrow(station4dets)/nrow(station4USdets)*100 # 94.4%
+nrow(station4dets)/nrow(station4USdets)*100 # 93.4%
 
 # Atna River
 station5dets <- detData %>% filter(rkm == 226.5 & waterbody == "Atna River") %>% count(freqCode)
 station5USdets <- detData %>% filter(rkm >= 226.5 & waterbody == "Atna River") %>% count(freqCode)
 
-nrow(station5dets)/nrow(station5USdets)*100 # 13.3%
+nrow(station5dets)/nrow(station5USdets)*100 # 93.1%
 
 # Clean up workspace
 rm(station2dets, station2USdets, 
-   station6dets , station6USdets, 
+   station6dets , station6USdets,
+   station5dets, station5USdets,
    station4dets, station4USdets)
 
-# Lower Bulkley
+# Lower Bulkley Fallback (can't really be calculated)
 
 # Summary Table ---------------------------------------------------------------
-
 
 # First let's create a big dataframe of all tagged fish that shows the first detection
 # at each station/waterbody. We'll include this in Appendix A.
@@ -125,7 +104,7 @@ bulkley <- detData %>%
         bulkleyDays = round(as.numeric(difftime(dateTime, tagDateTime, units = "days")),0)) %>%
   dplyr::select(freqCode, sex, bulkleyDate, bulkleyDays, station, tagDateTime, forkLength)
 
-upperbulkley <- detData %>% 
+upperbulkley <- detData %>% #none in 2024
   filter(waterbody == "Upper Bulkley River") %>%
   arrange(dateTime) %>%
   group_by(freqCode) %>%
@@ -162,6 +141,26 @@ atna <- detData %>%
          atnaDays = round(as.numeric(difftime(dateTime, tagDateTime, units = "days")))) %>%
   dplyr::select(freqCode, sex, atnaDate, atnaDays, station, tagDateTime, forkLength)
 
+#Read in last detections
+lastDetections <- read.csv(file = "Data Output/099_AllData_FinalCleaned_2024.csv", 
+                           header = TRUE, 
+                           stringsAsFactors = FALSE) %>%
+  arrange(desc(dateTime)) %>%
+  group_by(freqCode) %>%
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  #filter out tags with missing data (none)
+  #filter our tags not assigned (none)
+  dplyr::select(freqCode, station, method, waterbody)
+
+lastDetects <- as.data.frame(lastDetections) %>%
+  rename(Station = station,
+         Waterbody = waterbody,
+         Method = method) %>%
+  rename_with(~ paste0("lastDetect", .x), .cols = -freqCode)
+
+#Create a summery table
+
 summaryTable <- tagData %>%
   left_join(fallback, by = "freqCode") %>%
   left_join(bulkley, by = "freqCode") %>%
@@ -169,12 +168,15 @@ summaryTable <- tagData %>%
   left_join(moriceLake, by = "freqCode") %>%
   left_join(nanika, by = "freqCode") %>%
   left_join(atna, by = "freqCode") %>%
+  left_join(lastDetects, by = "freqCode") %>%
   dplyr::select(freqCode, tagDateTime = tagDateTime.x, sex=sex.x, fallbackHours,
                 bulkleyDate, bulkleyDays,
                 upperBulkleyDate, upperBulkleyDays,
                  moriceLakeDate, moriceLakeDays,
                  nanikaDate, nanikaDays,
-                atnaDate, atnaDays, forkLength) 
+                atnaDate, atnaDays, forkLength,
+                lastDetectStation, lastDetectMethod,
+                lastDetectWaterbody) 
   
 write.csv(summaryTable, file = "Data Output/099_Detections_SummaryTable.csv")
 
@@ -197,8 +199,8 @@ DetectedCount <- allDat %>%
   filter(station %in% c("1", "2", "4", "5", "6", "Mobile")) %>%
   distinct(freqCode, .keep_all = TRUE)
 
-DetectedCount #157 fish detected  fixed station or in mobile survey (97%)
-              #5 fish not detected anywhere (3%)
+DetectedCount #156 fish detected  fixed station or in mobile survey (92.3%)
+              #13 fish not detected anywhere (7.7%)
 
 undetectedTags <- anti_join(tagData, DetectedCount, by = "freqCode") %>%
   distinct(freqCode)
@@ -213,7 +215,7 @@ fixedCount <- detData %>%
   filter(station %in% c("1", "2", "4", "5", "6")) %>%
   distinct(freqCode, .keep_all = TRUE)
 
-fixedCount #151 fish detected at fixed stations (93%)
+fixedCount #156 fish detected at fixed stations (92.3%)
 
 #number of fish in mobile surveys
 
@@ -221,31 +223,50 @@ mobileCount <- detData %>%
   filter(station == "Mobile")  %>%
   distinct(freqCode, .keep_all = TRUE)
 
-mobileCount #82 fish detected in mobile surveys (51%)
+mobileCount #78 fish detected in mobile surveys (46.7%)
 
-#number of fish detected in multiple mobile surveys (10 surveys total)
+#number of fish detected in multiple mobile surveys (3 surveys total)
 
 mobileMultiDetect <- detData %>%
   filter(station == "Mobile")  %>%
   distinct(date, freqCode, .keep_all = TRUE)
 
 mobileMultiDetect %>% #number of fish detected 3 or more times on separate mobile surveys
-  count(freqCode) %>% #14  fish detected 3 or more times 
-  filter(n >= 3)
+  count(freqCode) %>% #37  fish detected 2 or more times 
+  filter(n >= 2)
   
 
 #number of fish at fallback station
 fallbackCount <- allDat %>%
   filter(station == "1")  %>%
-  distinct(freqCode, .keep_all = TRUE) #141 fish at fallback station (87%)
+  distinct(freqCode, .keep_all = TRUE) #80 fish at fallback station (47.3%)
 
-sum(fallbackCount$sex == "m") #71 male
-sum(fallbackCount$sex == "f") #51 female
-sum(fallbackCount$sex == "") #19 sex unknown
+sum(fallbackCount$sex == "M", na.rm = TRUE) #12 male
+sum(fallbackCount$sex == "F", na.rm = TRUE) #29 female
+sum(is.na(fallbackCount$sex)) #39 sex unknown
+
+
+#number of fish that were last detected at Bulkley fallback station or Tagging
+
+LowerBulkleyCount <- allDat %>%
+  group_by(freqCode) %>%
+  # Keep only freqCodes that were never detected at any station other than "1" or method == "tagging"
+  filter(all(station == "1" | method == "tagging")) %>%
+  # Now within those, keep only rows that are at station 1 (or whatever condition you want)
+  filter(station == "1" | method == "tagging") %>%
+  # Optional: get the most recent detection per freqCode
+  filter(dateTime == max(dateTime)) %>%
+  ungroup()
+
+#19 fish were last detected at the fallback station or tagging. (11.2%)
+#This includes lost tags.
+
+sum(LowerBulkleyCount$sex == "M", na.rm = TRUE) #0 male
+sum(LowerBulkleyCount$sex == "F", na.rm = TRUE) #11 female
+sum(is.na(LowerBulkleyCount$sex)) #8 sex unknown
 
 
 #number of fish at Bulkley fish station or Bulkley River (Morice)
-##NEEDS TO CONFIRM MORICE IS NOT UPPER BULKLEY
 
 bulkleyCount <- allDat %>%
   filter(station == "2" 
@@ -260,14 +281,14 @@ bulkleyCount <- allDat %>%
   ) %>%
   distinct(freqCode, .keep_all = TRUE) 
 
-#59 fish at bulkley station (36%)
-#67 fish after including mobile in bulkey station to morice(41%)
-#77 fish after including mobile in morice river(47%%) 
-#80 fish after including mobile in bulkley from witset canyon to bulkley station(49%) 
+#128 fish at bulkley station (75.7%)
+#0 fish after including mobile in bulkey station to morice(0%)
+#0 fish after including mobile in morice river(0%%) 
+#0 fish after including mobile in bulkley from witset canyon to bulkley station(0%) 
 
-sum(bulkleyCount$sex == "m") #42 male
-sum(bulkleyCount$sex == "f") #25 female
-sum(bulkleyCount$sex == "") #13 sex unknown
+sum(bulkleyCount$sex == "M", na.rm = TRUE) #25 male
+sum(bulkleyCount$sex == "F", na.rm = TRUE) #34 female
+sum(is.na(bulkleyCount$sex)) #69 sex unknown
 
 
 
@@ -279,12 +300,12 @@ nanikaRCount <- allDat %>%
   ) %>%
   distinct(freqCode, .keep_all = TRUE) 
 
-#17 fish at nanika station (10%)
-#18 fish after including mobile (11%)
+#70 fish at nanika station (41.4%)
+#78 fish after including mobile (46.2%)
 
-sum(nanikaRCount$sex == "m") #7 male
-sum(nanikaRCount$sex == "f") #7 female
-sum(nanikaRCount$sex == "") #4 sex unknown
+sum(nanikaRCount$sex == "M", na.rm = TRUE) #17 male
+sum(nanikaRCount$sex == "F", na.rm = TRUE) #21 female
+sum(is.na(nanikaRCount$sex)) #40 sex unknown
 
 #number of fish in Atna River
 atnaRCount <- allDat %>%
@@ -294,14 +315,15 @@ atnaRCount <- allDat %>%
   ) %>%
   distinct(freqCode, .keep_all = TRUE) 
 
-#4 fish at at station (2%)
-#30 fish after including mobile (19%)
+#27 fish at at station (16.0%)
+#29 fish after including mobile (17.1%)
 
-sum(atnaRCount$sex == "m") #20 male
-sum(atnaRCount$sex == "f") #9 female
-sum(atnaRCount$sex == "") #1 sex unknown
+sum(atnaRCount$sex == "M", na.rm = TRUE) #2 male
+sum(atnaRCount$sex == "F", na.rm = TRUE) #9 female
+sum(is.na(atnaRCount$sex)) #25 sex unknown
 
 #number of fish in upper bulkley
+#Note: no mobile tracks in upper bulkley in 2024
 
 upperBulkleyCount <- allDat %>%
   filter(!(freqCode == "149.42 08")) %>% #tag later detected in Atna River
@@ -311,11 +333,11 @@ upperBulkleyCount <- allDat %>%
  ) %>%
   distinct(freqCode, .keep_all = TRUE) 
 
-#10 fish in upper bulkley river (11%)
+#0 fish in upper bulkley river (0%)
 
-sum(upperBulkleyCount$sex == "m") #7 male
-sum(upperBulkleyCount$sex == "f") #2 female
-sum(upperBulkleyCount$sex == "") #1 sex unknown
+sum(upperBulkleyCount$sex == "M", na.rm = TRUE) #0 male
+sum(upperBulkleyCount$sex == "F", na.rm = TRUE) #0 female
+sum(is.na(upperBulkleyCount$sex)) #0 sex unknown
 
 #number of fish at Morice Lake outlet and lake
 moriceLCount <- allDat %>%
@@ -325,12 +347,12 @@ moriceLCount <- allDat %>%
   ) %>%
   distinct(freqCode, .keep_all = TRUE) 
 
-#1 fish at morice lake outley station (0.6%)
-#9 fish after including mobile (6%)
+#98 fish at morice lake outley station (58.0%)
+#98 fish after including mobile (58.0%)
 
-sum(moriceLCount$sex == "m") #4 male
-sum(moriceLCount$sex == "f") #5 female
-sum(moriceLCount$sex == "") #0 sex unknown
+sum(moriceLCount$sex == "M", na.rm = TRUE) #17 male
+sum(moriceLCount$sex == "F", na.rm = TRUE) #22 female
+sum(is.na(moriceLCount$sex)) #59 sex unknown
 
 #see if any morice lake fish are detected in atna or nanika after morice lake detection
 ## this is taken from the final detection on the array
@@ -349,24 +371,26 @@ moriceLCount <- allDat %>%
   group_by(freqCode) %>%
   filter(dateTime == max(dateTime))
   
-sum(moriceLCount$waterbody == "Atna River") #30 fish in atna - looks goods
-sum(moriceLCount$waterbody == "Nanika River") #18 in fish nanika - looks goods
-sum(moriceLCount$waterbody == "Morice Lake") #9 fish in morice lake - looks goods
+sum(moriceLCount$waterbody == "Atna River") #29 fish in atna - looks goods
+sum(moriceLCount$waterbody == "Nanika River") #70 in fish nanika - looks good
+# Note: 8 fish pick up at nanika station late observed US in morice or atna
+sum(moriceLCount$waterbody == "Morice Lake") #14 fish in morice lake - looks goods
 
 # spawner counts
 spawnerCounts <- bind_rows(upperBulkleyCount, moriceLCount, atnaRCount, nanikaRCount)%>%
   distinct(freqCode, .keep_all = TRUE) 
-# 30 in Atna
-# 18 in Nanika
-# 9 in Morice
-# 10 in upper bulkley
+# 29 in Atna
+# 70 in Nanika
+# 14 in Morice
+# 0 in upper bulkley
+
 
 # Mean date and and timing to fallback, Morice Lake, Nanika River, Atna River.
 summaryTable %>%
   summarise(meanFallbackHours = round(mean(fallbackHours, na.rm = TRUE),1),
             sdFallbackHours = round(sd(fallbackHours, na.rm = TRUE),1),
-            meanbulkley = round(mean(bulkleyDays, na.rm = TRUE),1),
-            sdbulkley = round(sd(bulkleyDays, na.rm = TRUE),1),
+            meanbulkleyDays = round(mean(bulkleyDays, na.rm = TRUE),1),
+            sdbulkleyDays = round(sd(bulkleyDays, na.rm = TRUE),1),
             meanMoriceLakeDays = round(mean(moriceLakeDays, na.rm = TRUE),1),
             sdMoriceLakeDays = round(sd(moriceLakeDays, na.rm = TRUE),1),
             meanMoriceLakeDate = mean(moriceLakeDate, na.rm = TRUE),
@@ -381,4 +405,6 @@ summaryTable %>%
             meanAtnaLakeDate = mean(atnaDate, na.rm = TRUE))
 
 
+
+write.csv(summaryTable, file = "Data Output/099_Detections_MeanSummaryTable.csv")
 
