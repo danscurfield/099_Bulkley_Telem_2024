@@ -1,6 +1,7 @@
 # Read in, run additional filtering of mobile and fixed telemetry data
 # Created by Pete Moniz - winter 2023
 # Updated by Dan Scurfield - Feb 2024
+# Updated by Dan Scurfield - Jun 2025
 
 # Initial Setup ---------------------------------------------------------------
 
@@ -22,104 +23,181 @@ options(scipen = 999)
 # Read In Data ----------------------------------------------------------------
 
 # Read in mobile filtered telemetry data. 
-mobileDataCleaned <- read.csv("Data Output/099_MobileTrackingData_2_InitialClean_RKM_2023.csv", 
+mobileDataCleaned <- read.csv("Data Output/099_MobileTrackingData_2_InitialClean_RKM_2024.csv", 
                        header = TRUE, 
                        stringsAsFactors = FALSE) %>%
-  mutate(date = ymd(date),
+  mutate(date = as_date(dateTime),
          dateTime = ymd_hms(dateTime),
-         tagDateTime = ymd_hms(tagDateTime)) %>%
+         tagDateTime = as.POSIXct(tagDateTime),
+         method = "Mobile") %>%
   dplyr::select(-X)
 
 # Read in fixed station data
-fixedDataCleaned <- read.csv("Data Output/099_FixedStationData_InitialClean_2023.csv", 
+fixedDataCleaned <- read.csv("Data Output/099_FixedStationData_InitialClean_2024.csv", 
                       header = TRUE, 
                       stringsAsFactors = FALSE) %>%
   mutate(date = ymd(date),
          dateTime = ymd_hms(dateTime),
-         tagDateTime = ymd_hms(tagDateTime),
+         tagDateTime = ymd_hms(paste(tagDateTime, "00:00:00")),
          station = as.character(station),
-         lat = case_when(station == "1" ~ 55.01835,
+         latitude = case_when(station == "1" ~ 55.01835,
                          station == "2" ~ 54.78871,
                          station == "4" ~ 54.04742,
                          station == "5" ~ 54.014545,
-                         station == "6" ~ 54.10783,),
-         long = case_when(station == "1" ~ -127.3189,
+                         station == "6" ~ 54.10783),
+         longitude = case_when(station == "1" ~ -127.3189,
                           station == "2" ~ -127.1463,
                           station == "4" ~ -127.4264,
                           station == "5" ~ -127.74321,
                           station == "6" ~ -127.4250)) %>%
-  dplyr::select(-X)
+  dplyr::select(-X, -file)
 
 # Read in tagging data, same as before, except we'll also make some additional 
 # variables so that we can combine these with the fixed station data.
 # This will allow us to more easily calculate movement rates after release and
 # filter out improbable movement rates.
-tagData <- read.csv("Data Input/099_Tag_Metadata_2023.csv", 
-                    header = TRUE, 
-                    stringsAsFactors = FALSE, na.strings = c("","unknown", "NA")) %>%
-  mutate(date = mdy(date),
-         tagDateTime = as.POSIXct(paste0(date, time, sep = " "), 
-                                  format="%Y-%m-%d %H:%M"),
-         #code = ifelse(code < 10, paste0("0",code), as.character(code)),
-         freq = paste("149.", freq, sep = ""),
-         freqCode = paste(freq, code, sep = " "),
-         code = as.numeric(code), # 2 tag code numbers have "?"
+tagData <- read_csv("Data Input/tagData.csv") %>%
+  mutate(date = ymd(tagDateTime),
+         tagDateTime = as.POSIXct(tagDateTime),
          dateTime = tagDateTime,
+         code = sub(".* ", "", freqCode),
          rkm = 0,
          waterbody = "Tagging",
          method = "Tagging",
          station = "Tagging",
-         power = NA,
-         lat = NA,
-         long = NA) %>%
-  dplyr::select(date, dateTime, freqCode, code, power, waterbody, rkm, method, station,
-                tagDateTime, sex, forkLength, lat, long) %>%
-  # filter out recaptured fish
-  filter(!(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 41"),
-         !(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 42"),
-         !(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 45"),
-         !(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 46"),
-         !(tagDateTime == "2023-07-10 09:15:00" & freqCode == "149.48 45"),
-         !(tagDateTime == "2023-07-10 10:56:00" & freqCode == "149.48 50")) %>%
-  #filter out tags with missing data
-  filter(!(freqCode == "149.42 NA"),
-         !(freqCode == "149.48 3?"),
-         !(freqCode == "149.48 49?"),
-          !(freqCode == "149.48 NA")) 
+         power = NA, 
+         longitude = -127.3283,
+         latitude = 55.0146) %>%
+  dplyr::select(date, tagDateTime, dateTime, freqCode, code, rkm, waterbody, 
+                method, station, power, sex, forkLength, latitude, longitude)
+#filter out recapture fish (none)
+#filter out fish with missing data (none)
 
 
-lostTags <- read.csv("Data Output/099_LostTags_2023.csv", 
-                    header = TRUE, 
-                    stringsAsFactors = FALSE)  %>%
+
+#Add lost tags
+
+new_tag <- data.frame(
+  freqCode = "149.500 023", #this appears to be a lost tag from detection history plot
+  earliestDate = ymd_hms("2024-08-01 05:41:06"),
+  method = "Lost Tag",
+  stringsAsFactors = FALSE)
+
+lostTags <- read.csv("Data Output/099_LostTags_2024.csv", 
+                     header = TRUE, 
+                     stringsAsFactors = FALSE) %>%
+  #remove known alive fish - observed upstream
+  filter(freqCode != "149.320 127") %>%
+  filter(freqCode != "149.340 001") %>%
+  filter(freqCode != "149.340 002") %>%
+  filter(freqCode != "149.340 003") %>%
+  filter(freqCode != "149.340 004") %>%
+  filter(freqCode != "149.340 006") %>%
+  filter(freqCode != "149.340 008") %>%
+  filter(freqCode != "149.500 001") %>%
+  filter(freqCode != "149.500 002") %>%
+  filter(freqCode != "149.500 018") %>%
+  filter(freqCode != "149.500 034") %>%
+  filter(freqCode != "149.500 044") %>%
+  filter(freqCode != "149.500 071") %>%
+  #note when tag is lost and change to correct date
+  mutate(earliestDate = case_when(
+    freqCode == "149.320 146" ~ ymd_hms("2024-08-24 10:10:14"),
+    freqCode == "149.500 100" ~ ymd_hms("2024-07-31 10:50:28"))) %>%
   mutate(method = "Lost Tag") %>%
-  dplyr::select(-X)
+  dplyr::select(-X, -unique_freqCode) %>%
+  #add new lost tags
+  bind_rows(new_tag)
+
+rm(new_tag)
+
+
+#FIXED STATIONS
+# These fish are alive
+#	149.320 127 seen upstream (S2)
+# 149.340 001 seen upstream (S2)
+# 149.340 002 seen upstream (S2)
+# 149.340 003 seen upstream (S2)
+# 149.340 004 seen upstream (S2)
+# 149.340 006 seen upstream (S2)
+# 149.340 008 seen upstream (S2)
+# 149.500 001 seen upstream (S5 Atna)
+# 149.500 002 seen upstream (S5 Atna)
+# 149.500 018 seen upstream (S4 Nanika)
+# 149.500 034 seen upstream (S6 Morice L)
+# 149.500 044 seen upstream (S4 Nanika)
+# 149.500 071 seen upstream (S4 Nanika)
+
+
+#lost (dead)
+#149.320 146 only seen at S2 2024-08-24 10:10:14
+#149.500 100 only seen at S2 since 2024-07-31 10:50:28
+
+#create a fish deaths dataframe from  from mobile tracks
+
+fishDeath <- read.csv("Data Output/099_fishDeath_2024.csv", 
+                      header = TRUE, 
+                      stringsAsFactors = FALSE) %>%
+  mutate(method = "Fish Death") %>%
+  dplyr::select(-X, -unique_freqCode)
+  
+#MOBILE TRACKS
+  # 13s tags (fish death)
+  # 149.500 008 at 2024-10-01 17:58:23
+  # 149.500 025 at 2024-10-01 17:59:17 (2x)
+  
+  #26s tags (fish death)
+  # 149.500 071 at 2024-10-01 19:29:55
+  # 149.500 033 at 2024-10-01 19:38:50
+  # 149.500 034
+  # 149.500 038 at 2024-10-01 19:30:59
+  # 149.500 014 at 2024-10-01 19:32:21
+
 
 # Additional Filtering --------------------------------------------------------
 
-# First let's remove erroneous detections when the difference between detections 
-# for the same tag were less than the tag’s pulse rate (5 seconds).
-# This removes 10,770 detections.
-allData <- rbind(fixedDataCleaned, mobileDataCleaned, tagData) %>%
-  arrange(dateTime) %>%
-  group_by(freqCode) %>%  arrange(dateTime) %>%
-  group_by(freqCode) %>%
-  mutate(lag = difftime(dateTime, lag(dateTime), units = "secs")) %>%
-  # mutate(lag = as.numeric(difftime(dateTime, lag(dateTime), units = "secs"))) %>%
-  filter((lag >= 5 | is.na(lag))) %>% # is.na(lag) keeps the tagging data since those don't have a previous detection.
-  mutate(method = ifelse(lag == 13 & (method == "Fixed" | method == "Mobile"), "Lost Tag", method)) %>% #these are lost tags / dead fish
-  ungroup() %>%
-  filter(!(freqCode == "149.42 01" & rkm == 214 & dateTime >= "2023-07-08 18:34:51"),
-         !(freqCode == "149.42 02" & rkm == 214 & dateTime == "2023-07-07 19:19:16"), 
-         !(freqCode == "149.48 24" & dateTime == "2023-09-06 08:09:00"), 
-         !(freqCode == "149.48 29" & station == "Mobile" & dateTime >= "2023-09-06 08:02:00" & dateTime <= "2023-09-06 08:09:00")) #these removed because falsely detected immediately
+# Step One: General cleaning
 
+# First lets join are dataframes together include are lost tags and dead fish
+# Then we will remove erroneous detections where the difference between the 
+# detections are less that the tag pulse rate (5s)
+
+# This removes 616 detections.
+
+allData <- rbind(fixedDataCleaned, mobileDataCleaned, tagData) %>% #466078 detections
+  #add lost tags
+  left_join(lostTags, by = "freqCode", suffix = c("", "_lost")) %>%
+  mutate(method = case_when(
+    !is.na(earliestDate) & dateTime >= earliestDate ~ "Lost Tag",
+                            TRUE ~ method)) %>%
+  dplyr::select(-earliestDate, -method_lost) %>%
+  #add fish deaths
+  left_join(fishDeath, by = "freqCode", suffix = c("", "_death")) %>%
+  mutate(method = case_when(
+    !is.na(earliestDate) & dateTime >= earliestDate ~ "Death",
+    TRUE ~ method)) %>%
+  dplyr::select(-earliestDate, -method_death) %>%
+  #arrange data nicely
+  arrange(dateTime) %>%
+  group_by(freqCode) %>%  
+  mutate(lag = difftime(dateTime, lag(dateTime), units = "secs")) %>%
+  #remove irregular tag data
+  filter((lag >= 5 | is.na(lag))) %>% # is.na(lag) keeps the tagging data since those don't have a previous detection. 465462 detections
+  ungroup() 
+
+#remove unneeded df's
+rm(fishDeath, lostTags, fixedDataCleaned, mobileDataCleaned, tagData)
+  
 
 # Next we'll remove detections of tags downstream of Nanika River once the fish 
 # has already made it to Nanika River. The Nanika River fixed station had a 
 # relatively low FP rate and high efficiency, so I have pretty high confidence that
 # we can consider these real detections.
-# This process removes 1954 detections.
-allData1 <- allData %>%
+# note: Atna and some of Morive Lake is upstream of Nanika (let's not remove 
+# those)
+# This process removes 21,658 detections.
+
+allData1 <- allData %>% #443804 detections
   arrange(dateTime) %>% 
   group_by(freqCode, waterbody) %>%
   mutate(nanikaSwitch = ifelse(waterbody == "Nanika River" & row_number() == 1, 1,0)) %>%
@@ -127,17 +205,18 @@ allData1 <- allData %>%
   arrange(dateTime) %>%
   group_by(freqCode) %>%
   mutate(reachedNanika = cumsum(nanikaSwitch)) %>%
-  filter(!(reachedNanika == 1 & waterbody != "Nanika River")) %>%
+  filter(!(reachedNanika == 1 & !waterbody %in% c("Nanika River", "Atna River", "Morice Lake") | #only remove detections at outlet fixed station and downstream of Morice Lake
+             reachedNanika == 1 & waterbody == "Morice Lake" & method == "Fixed")) %>% 
   ungroup() %>%
   dplyr::select(-nanikaSwitch, -reachedNanika)
 
 # Next we'll remove detections of tags downstream of Atna River once the fish 
 # has already made it to Atna River. The Atna River fixed station had an 
-# extremely low FP (false positive) rate but poor efficiency, so it can be
-# assumed that the fishdetected are all true.
-# we can consider these real detections.
-# This process removes 338 detections.
-allData2 <- allData1 %>%
+# extremely low FP (false positive) rate and high efficiency as will, so I have 
+#pretty high confidence that we can consider these real detections.
+
+# This process removes 1012 detections.
+allData2 <- allData1 %>% #442792 detection
   arrange(dateTime) %>% 
   group_by(freqCode, waterbody) %>%
   mutate(atnaSwitch = ifelse(waterbody == "Atna River" & row_number() == 1, 1,0)) %>%
@@ -149,214 +228,26 @@ allData2 <- allData1 %>%
   ungroup() %>%
   dplyr::select(-atnaSwitch, -reachedAtna)
 
-# Now lets add a distance traveled, lag in days between detections, and a rate
-# in rkm/day to manually filter out detections with unrealistic rates of travel
-allData3 <- allData2 %>%
-  arrange(dateTime) %>%
-  group_by(freqCode) %>%
-  mutate(lag = as.numeric(difftime(dateTime, lag(dateTime), units = "secs"))) %>%
-  filter((lag >= 5 | is.na(lag))) %>% # is.na(lag) keeps the tagging data since those don't have a previous detection.
+# Next we'll remove detections of tags downstream of Morice Lake Outlet once the 
+# fish has already made it to Morice Lake. In 2024, the Morice Lake Outlet 
+# fixed station had relatively low FP (false positive) rate and high efficiency 
+# as well
+#note: Anta River and Nanika River are both upstream
+#so with confidence we can consider these real detections
+
+
+# This process removes 478 detections.
+allData3 <- allData2 %>% # 442314 detections
+  arrange(dateTime) %>% 
+  group_by(freqCode, waterbody) %>%
+  mutate(moriceSwitch = ifelse(waterbody == "Morice Lake" & row_number() == 1, 1,0)) %>%
   ungroup() %>%
   arrange(dateTime) %>%
   group_by(freqCode) %>%
-  mutate(distance = abs(rkm - lag(rkm)),
-         lagDays = as.numeric(difftime(dateTime, lag(dateTime), units = "days")),
-         rate = distance/lagDays) %>%
-  ungroup()
-
-impossible_rates <- allData3 %>%
-  filter(rate > 100 & distance > 100)
-
-# Now that we've removed a few bogus detections and calculated a rate in rkm/day,
-# we can use those rates to filter out detections that suggest unrealistic movement rates.
-
-# I did this manually since there weren't that many tags to look through, 
-# but I'm sure it could be automated with a "while" loop where you:
-#   1) Calculate distance, lag in days, and rates of movement between detections for each tag;
-#   2) Remove the very first detection for each tag with an impossible rate (ex: movement of > 100 rkm at > 100 rkm/day);
-#   3) Re-calculate distance, lag in days, and rates of movement between detections after first detection removed;
-#   4) Remove next detection for each tag with an impossible rate;
-#   5) Then keep doing those steps until no more detections are removed from any tags.
-  
-# Most of the obvious false detections with impossible movement rates are from the Morice Lake Outlet fixed (rkm 201) station in 2022. 
-# This isn't surprising considering how noisy this station was (99% of dets removed during initial cleaning step).
-# Seems to be lots of false detections at Morice lake outlet (83%) and lower bulkley (93%) station in 2023. 
-
-
-# This step removes __ detections.
-## Currently very messy but keep this adding to this
-## this removes 9629 detections
-allData4 <- allData3 %>%
-  arrange(dateTime) %>%
-  group_by(freqCode) %>%
+  mutate(reachedMorice = cumsum(moriceSwitch)) %>%
+  filter(!(reachedMorice == 1 & !waterbody %in% c("Nanika River", "Atna River", "Morice Lake"))) %>%
   ungroup() %>%
-  arrange(dateTime) %>%
-  group_by(freqCode) %>%
-  mutate(distance = abs(rkm - lag(rkm)),
-         lagDays = as.numeric(difftime(dateTime, lag(dateTime), units = "days")),
-         rate = distance/lagDays) %>%
-  #filter our lost tags
-  filter(
-!(freqCode == "149.42 01" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-09-13 16:07:59"),
-!(freqCode == "149.42 02" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-10-09 10:52:19"),
-!(freqCode == "149.42 02" & (method == "Fixed" | method == "Mobile") & dateTime == "2023-10-09 10:52:06"), #detection during lost tag signal
-!(freqCode == "149.42 03" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-10-09 13:55:12"),
-!(freqCode == "149.42 09" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-08-15 15:47:45"),
-!(freqCode == "149.42 100" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-09-15 14:39:00"),
-!(freqCode == "149.42 100" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-09-15 14:02:59"), #detection during lost tag signal
-!(freqCode == "149.42 150" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-09-09 19:57:39"),
-!(freqCode == "149.42 150" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-09-08 19:40:57"), #detection during lost tag signal
-!(freqCode == "149.42 62" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-10-09 16:02:59"),
-!(freqCode == "149.42 68" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-09-15 16:50:01"),
-!(freqCode == "149.42 68" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-09-13 15:07:26"), #detection during lost tag signal
-!(freqCode == "149.42 77" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-08-06 13:57:42"),
-!(freqCode == "149.42 77" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-08-06 13:55:32"), #detection during lost tag signal
-!(freqCode == "149.48 101" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-08-05 00:04:51"),
-!(freqCode == "149.48 109" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-08-15 04:59:56"),
-# !(freqCode == "149.48 116" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-08-16 12:14:05"),
-!(freqCode == "149.48 22" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-07-14 11:12:46"),
-#!(freqCode == "149.48 29" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-07-22 11:31:49"),
-!(freqCode == "149.48 34" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-08-25 12:19:06"),
-!(freqCode == "149.48 44" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-07-14 11:58:21"), #sketchy tag
-!(freqCode == "149.48 46" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-07-29 09:37:06"), #sketchy tag
-!(freqCode == "149.48 47" & (method == "Fixed" | method == "Mobile") & dateTime >= "2023-09-13 12:32:53")) %>%
-  #filter out odd detections - removes 1816 detections
-  filter(
-         # !(freqCode == "149.42 01" & rkm == 42.0 & dateTime == "2023-10-09 11:16:11"), #very suspect tag
-         !(freqCode == "149.42 02" & station == "Mobile"),
-         # !(freqCode == "149.42 02" & rkm == 42.0 & dateTime == "2023-10-09 10:52:06"), #very suspect tag - 13s interval = dead
-         !(freqCode == "149.42 03" & rkm == -0.7 & dateTime >= "2023-08-08 14:51:16"), #03 removing out some possibly real detections
-         !(freqCode == "149.42 06" & dateTime == "2023-08-30 05:43:00"),
-         !(freqCode == "149.42 06" & dateTime == "2023-09-25 09:14:00"),
-         !(freqCode == "149.42 08" & dateTime == "2023-09-27 12:09:00"),
-         !(freqCode == "149.42 15" & dateTime >= "2023-09-22 09:52:00"),  
-         !(freqCode == "149.42 15" & dateTime <= "2023-09-26 06:08:00"), #removes many (~15) mobile detections
-         !(freqCode == "149.42 17" & dateTime == "2023-09-06 08:07:00"),
-         !(freqCode == "149.42 18" & dateTime == "2023-08-02 15:44:55"),
-         !(freqCode == "149.42 19" & dateTime == "2023-08-02 15:44:55"),
-         !(freqCode == "149.42 21" & dateTime == "2023-08-28 15:30:53"),
-         !(freqCode == "149.48 22" & dateTime == "2023-09-22 03:35:00"),
-         !(freqCode == "149.48 22" & dateTime == "2023-09-25 06:02:00"),
-         !(freqCode == "149.48 23" & dateTime == "2023-08-30 05:40:00"),
-         !(freqCode == "149.48 24" & rkm == -0.7 & dateTime >= "2023-09-01 10:55:28"),
-         !(freqCode == "149.48 24" & station == "Mobile" & dateTime >= "2023-09-22 03:49:00"),
-         !(freqCode == "149.48 26" & dateTime == "2023-09-28 11:03:00"),
-         #!(freqCode == "149.48 27" & rkm == -0.7 & dateTime >= "2023-07-10 01:19:46"), #all singular detections
-         !(freqCode == "149.48 28" & rkm == -0.7 & dateTime >= "2023-08-10 21:43:05"), #all singular detections
-         !(freqCode == "149.48 29" & rkm == -0.7 & dateTime >= "2023-09-15 16:57:14"),
-         !(freqCode == "149.48 29" & station == "Mobile" & dateTime == "2023-09-22 03:46:00"),
-         !(freqCode == "149.48 29" & station == "Mobile" & dateTime >= "2023-09-22 04:46:00" & dateTime <= "2023-09-22 04:58:00"), 
-         !(freqCode == "149.48 30" & rkm == -0.7 & dateTime >= "2023-08-28 15:32:22"),
-         !(freqCode == "149.48 34" & rkm == -0.7 & dateTime >= "2023-08-19 18:36:32"),
-         !(freqCode == "149.48 38" & rkm == -0.7 & dateTime >= "2023-07-13 18:28:55"),
-         !(freqCode == "149.48 39" & rkm == -0.7 & dateTime >= "2023-08-02 11:51:46"),
-         !(freqCode == "149.48 40" & rkm == -0.7 & dateTime >= "2023-08-23 17:57:40"),
-         !(freqCode == "149.48 41" & rkm == -0.7 & dateTime >= "2023-08-03 13:15:54"),
-         !(freqCode == "149.48 44" & dateTime == "2023-07-09 17:10:17"),
-         !(freqCode == "149.48 44" & rkm == 42.0 & dateTime == "2023-07-06 09:30:47"), #44 is a suspect tag
-         !(freqCode == "149.48 46" & dateTime == "2023-07-08 18:46:49"),
-         !(freqCode == "149.48 46" & rkm == 42.0 & dateTime >= "2023-07-06 09:32:13"), #46 is a suspect tag
-         !(freqCode == "149.48 47" & rkm == -0.7 & dateTime >= "2023-08-15 08:49:40"),
-         !(freqCode == "149.48 49" & rkm == -0.7 & dateTime >= "2023-08-26 20:06:42"),
-         !(freqCode == "149.48 51" & rkm == 42.0 & dateTime == "2023-07-24 09:41:02"),
-         !(freqCode == "149.48 51" & rkm == -0.7 & dateTime == "2023-07-23 17:02:59"),
-         !(freqCode == "149.48 53" & rkm == -0.7 & dateTime >= "2023-07-30 08:54:26"),
-         !(freqCode == "149.48 54" & rkm == -0.7 & dateTime >= "2023-08-03 15:40:43"),
-         !(freqCode == "149.48 56" & rkm == -0.7 & dateTime >= "2023-08-02 11:59:40"),
-         !(freqCode == "149.48 57" & rkm == -0.7 & dateTime >= "2023-07-30 08:58:30"),
-         !(freqCode == "149.48 58" & dateTime >= "2023-09-22 05:08:00" & dateTime <= "2023-09-25 06:43:00"),
-         !(freqCode == "149.48 59" & station == "Mobile" & dateTime >= "2023-09-22 04:24:00" & dateTime == "2023-09-25 09:14:00"),
-         !(freqCode == "149.48 59" & rkm == -0.7 & dateTime >= "2023-08-21 17:00:30"),
-         !(freqCode == "149.42 61" & dateTime == "2023-09-06 14:48:03"),
-         !(freqCode == "149.42 62" & dateTime == "2023-07-11 03:35:42"),
-         !(freqCode == "149.42 63" & dateTime == "2023-09-06 08:07:00"), #check and 64
-         !(freqCode == "149.42 67" & rkm == -0.7 & dateTime >= "2023-09-13 16:07:45"),
-         !(freqCode == "149.42 73" & station == "Mobile" & dateTime <= "2023-09-22 04:46:00"),
-         !(freqCode == "149.42 77" & rkm == -0.7 & dateTime <= "2023-08-31 14:35:09"), #check
-         !(freqCode == "149.42 78" & rkm == -0.7 & dateTime >= "2023-08-23 14:31:18"),
-         !(freqCode == "149.42 82" & dateTime == "2023-09-06 08:06:00"),
-         !(freqCode == "149.42 82" & dateTime == "2023-09-06 08:07:00"),
-         !(freqCode == "149.42 83" & dateTime == "2023-09-13 16:08:03"),
-         !(freqCode == "149.42 84" & rkm == -0.7 & dateTime >= "2023-08-30 15:40:46"),
-         !(freqCode == "149.42 86" & rkm == -0.7 & dateTime >= "2023-07-18 16:01:13"),
-         !(freqCode == "149.42 88" & rkm == -0.7 & dateTime >= "2023-08-29 08:38:01"),
-         !(freqCode == "149.42 89" & rkm == -0.7 & dateTime >= "2023-08-23 15:45:15"),
-         !(freqCode == "149.42 90" & rkm == -0.7 & dateTime >= "2023-07-26 09:04:57"),
-         !(freqCode == "149.42 91" & rkm == -0.7 & dateTime == "2023-09-02 15:32:17"),
-         !(freqCode == "149.42 92" & rkm == -0.7 & dateTime >= "2023-08-18 08:50:09"),
-         !(freqCode == "149.42 93" & station == "Mobile" & dateTime >= "2023-09-22 04:07:00"),
-         !(freqCode == "149.42 94" & rkm == -0.7 & dateTime >= "2023-09-05 09:08:54"),
-         !(freqCode == "149.42 95" & rkm == -0.7 & dateTime >= "2023-07-23 15:32:06"),
-         !(freqCode == "149.42 96" & rkm == -0.7 & dateTime == "2023-08-23 21:30:49"),
-         !(freqCode == "149.48 101" & station == "Mobile" & dateTime == "2023-09-22 04:49:00"),
-         !(freqCode == "149.48 102" & rkm == -0.7 & dateTime >= "2023-07-29 18:15:43"),
-         !(freqCode == "149.48 103" & rkm == -0.7 & dateTime >= "2023-08-10 20:32:44"),  
-         !(freqCode == "149.48 104" & rkm == -0.7 & dateTime >= "2023-07-29 18:15:43"), 
-         !(freqCode == "149.48 106" & rkm == 42.0 & dateTime == "2023-07-15 01:30:34"), 
-         !(freqCode == "149.48 109" & rkm == -0.7 & dateTime >= "2023-09-02 17:29:06"),
-         !(freqCode == "149.48 115" & rkm == -0.7 & dateTime >= "2023-08-24 10:18:47"),  
-         !(freqCode == "149.48 116" & rkm == -0.7 & dateTime >= "2023-08-18 08:58:52"),  
-         !(freqCode == "149.48 116" & rkm == 42 & dateTime >= "2023-08-14 14:36:50"),  
-         !(freqCode == "149.48 119" & rkm == -0.7 & dateTime >= "2023-08-08 22:38:15"),
-         !(freqCode == "149.48 120" & rkm == -0.7 & dateTime >= "2023-08-16 07:18:42"), 
-         !(freqCode == "149.48 121" & rkm == -0.7 & dateTime >= "2023-08-17 04:58:56"),
-         !(freqCode == "149.48 122" & rkm == -0.7 & dateTime >= "2023-09-02 17:24:45"),
-         !(freqCode == "149.48 125" & rkm == -0.7 & dateTime >= "2023-08-05 00:31:35"),   
-         !(freqCode == "149.48 126" & rkm == -0.7 & dateTime >= "2023-08-12 21:06:15"), 
-         !(freqCode == "149.48 127" & rkm == -0.7 & dateTime >= "2023-08-15 17:40:36"), 
-         !(freqCode == "149.48 129" & rkm == -0.7 & dateTime >= "2023-09-05 16:48:32"), 
-         !(freqCode == "149.48 129" & rkm == -0.7 & dateTime >= "2023-07-27 15:51:16"), 
-         !(freqCode == "149.48 130" & rkm == -0.7 & dateTime >= "2023-08-01 12:41:06"), 
-         !(freqCode == "149.48 138" & dateTime >= "2023-09-05 18:42:23"),
-         !(freqCode == "149.48 140" & rkm == -0.7 & dateTime >= "2023-08-13 11:00:30"),
-         !(freqCode == "149.48 149" & rkm == -0.7 & dateTime >= "2023-09-05 16:44:05"),
-         !(freqCode == "149.42 148" & rkm == -0.7 & dateTime >= "2023-08-14 08:32:49"),
-         !(freqCode == "149.42 157" & rkm == -0.7 & dateTime >= "2023-07-31 16:11:25"),
-         !(freqCode == "149.42 158" & rkm == -0.7 & dateTime == "2023-09-13 16:01:23"),
-         !(freqCode == "149.42 159" & rkm == -0.7 & dateTime == "2023-08-09 16:00:27"),
-         !(freqCode == "149.42 159" & rkm == 42.0 & dateTime == "2023-07-19 01:28:42")) %>%
-  ungroup()
-
-
-allData5 <- allData4 %>%
-  arrange(dateTime) %>%
-  group_by(freqCode) %>%
-  ungroup() %>%
-  arrange(dateTime) %>%
-  group_by(freqCode) %>%
-  mutate(distance = abs(rkm - lag(rkm)),
-         lagDays = as.numeric(difftime(dateTime, lag(dateTime), units = "days")),
-         rate = distance/lagDays) %>%
-  ungroup()
-      
-
-impossible_rates <- allData5 %>%
-  filter(rate > 100 & distance > 100)
-
-
-
-# Given the high noise levels at the Morice Lake Outlet fixed station, we'll manually remove
-# detections of tags that were only detected once at that station, or for code 26,
-# which was detected twice but only on two different dates.
-## Not done in 2023, since very few true detections 
-
-# allData3 <- allData2 %>%
-#   filter(!(freqCode == "149.46 12" & dateTime == "2022-10-14 14:20:41"),
-#          !(freqCode == "149.46 14" & dateTime == "2022-10-24 13:29:34"),
-#          !(freqCode == "149.46 21" & dateTime == "2022-10-24 13:39:44"),
-#          !(freqCode == "149.46 25" & dateTime == "2022-10-27 04:29:27"),
-#          !(freqCode == "149.46 28" & dateTime == "2022-10-27 20:14:50"),
-#          !(freqCode == "149.46 40" & dateTime == "2022-10-28 15:16:42"),
-#          !(freqCode == "149.46 26" & dateTime == "2022-10-27 06:41:43"),
-#          !(freqCode == "149.46 26" & dateTime == "2022-10-31 18:21:51"))
-
-
-# Now let's see how many detections there were per tag at the morice lake outlet
-moriceLakeOutlet <- allData5 %>% 
-  filter(rkm == 201) %>% count(freqCode)
-# Didn't use this info for filtering, but maybe we should?
-# Here are some notes:
-# tag 149.48 24 detected one time - looks legit.
+  dplyr::select(-moriceSwitch, -reachedMorice)
 
 ####this did not get used in 2024
 # Now we should have a decent dataset for when fish actually made it to Morice Lake (or above),
@@ -380,19 +271,230 @@ moriceLakeOutlet <- allData5 %>%
 #   filter(rate > 100 & distance > 100)
 
 
+#Important: 
+#all of the filtering for each site must be done while only calculating "lag"
+# once or else might be remove true detects based on false pretenses.
+
+
+# Now lets add a distance traveled, lag in days between detections, and a rate
+# in rkm/day to manually filter out detections with unrealistic rates of travel
+allData4 <- allData3 %>%
+  arrange(dateTime) %>%
+  group_by(freqCode) %>%
+  mutate(lag = as.numeric(difftime(dateTime, lag(dateTime), units = "secs"))) %>%
+  filter((lag >= 5 | is.na(lag))) %>% # is.na(lag) keeps the tagging data since those don't have a previous detection.
+  ungroup() %>%
+  arrange(dateTime) %>%
+  group_by(freqCode) %>%
+  mutate(distance = abs(rkm - lag(rkm)),
+         lagDays = as.numeric(difftime(dateTime, lag(dateTime), units = "days")),
+         rate = distance/lagDays) %>%
+  ungroup()
+
+impossible_rates <- allData4 %>% #114 fish
+  filter(rate > 60) # used to be  filter(rate > 100 & distance > 100) but the distance didnt make sense
+
+# Now that we've removed a few bogus detections and calculated a rate in rkm/day,
+# we can use those rates to filter out detections that suggest unrealistic movement rates.
+
+#Note on 2): Sockeye max burst speed is 57.6 km/day (2.4 km/h). 
+#We will set out rate to 60 rkm per day to filter out these detects
+
+#Pete did this in the past:
+# I did this manually since there weren't that many tags to look through, 
+# but I'm sure it could be automated with a "while" loop where you:
+#   1) Calculate distance, lag in days, and rates of movement between detections for each tag;
+#   2) Remove the very first detection for each tag with an impossible rate (ex: movement of > 100 rkm at > 100 rkm/day);
+#   3) Re-calculate distance, lag in days, and rates of movement between detections after first detection removed;
+#   4) Remove next detection for each tag with an impossible rate;
+#   5) Then keep doing those steps until no more detections are removed from any tags.
+# I (DS) prefer to use throurough filter and manuall remove a few false using 
+# the detection history plots at the end. 
+
+#note: no need to calculate lag. This was done is allData4, and will alter the 
+# how detections are removed (especially if not careful), you can easily remove
+# the first true detect if you continue to lag each time.
+
+# Remove single detections at Station 1 & 2
+# Remove detections at station 2 the same day as tagging
+# Remove detections at Station 1 & 2 greater than 1 min
+# Remove detections at Station 1 & 2 not divisible by 5 - removing 1st detect in a sequence of detections. 
+# Remove single detections at Station 2 that were missed because they are the final detection
+
+# This removes 195,226 detections
+
+allData5 <- allData4 %>%
+  arrange(dateTime) %>%
+  group_by(freqCode) %>%
+  #Station 2: remove single detections and tagging same day detections
+  filter(!(station == "2" & lead(station) != "2" & lag(station) != "2")) %>% #remove single detections - 435345
+  filter(!(station == "2" & tagDateTime == date)) %>% # remove tags detected same day as tagging (no tagging time recorded) -  434912
+  #Station 1: remove single detections
+  filter(!(station == "1" & lead(station) != "1" & lag(station) != "1")) %>% #remove single detections - 426067
+  # 75 fish with impossible rates
+  
+  #Station 2: remove > 1min lag and not divisible by 5 detects
+  filter(!(station == "2" & lag > 60 & distance == 0.0)) %>% #remove tags recorded at a lag of 5 min or more - 427865
+  filter(!(station == "2" & lag %% 5 != 0 & distance == 0.0)) %>% #remove tags not divisible by 5
+  #Station 1: remove > 1min lag and not divisible by 5 detects
+  filter(!((station == "1" & lag > 60 & distance == 0.0))) %>% #remove tags recorded at lag of 5 min or more - 418726
+  filter(!(station == "1" & lag %% 5 != 0 & distance == 0.0)) %>% #remove tags not divisible by 5
+  # 54 fish with impossible rates
+  #remove missed false final detections 
+  mutate(row_id = row_number(),
+         max_row = max(row_id)) %>%
+  filter(!(row_id == max_row & station == "2" & lag > 360)) %>%
+  select(-row_id, -max_row) %>%
+  #recalculate lag
+  arrange(dateTime) %>%
+  group_by(freqCode) %>%
+  mutate(lag = as.numeric(difftime(dateTime, lag(dateTime), units = "secs")),
+         distance = abs(rkm - lag(rkm)),
+         lagDays = as.numeric(difftime(dateTime, lag(dateTime), units = "days")),
+         rate = distance/lagDays) %>%
+  ungroup()
+  
+
+impossible_rates <- allData5 %>% # 45 fish
+  filter(rate > 60)
+
+#Station 2 unlikely detections - to be manually removed
+#	149.340 002 at 2024-08-03 20:24:41 (once) and 2024-08-04 13:31:52 (once)
+# 149.340 003 at 2024-08-07 15:37:39 (once)
+# 149.340 006 at 2024-08-09 11:51:46 (once)
+# 149.500 018 at 2024-07-17 00:44:14 (once)
+# 149.500 044 at 2024-07-22 07:21:19 (once)
+# 149.500 052 at 2024-07-28 12:11:36 (once)
+# 149.500 058 2024-07-24 02:21:42 (once)
+# 149.500 060 2024-07-24 12:44:33 (once)
+# 149.500 073 2024-07-28 13:53:23 (once)
+# 149.500 016 on 2024-07-22 (4x)
+# 149.500 003 on 2024-07-22 (4x)
+
+
+#Station 1
+# 149.500 023 weird detects from 2024-08-06 21:49:27 to 2024-08-11 14:31:59
+# This is added to the lost tags (above) starting on 2024-08-01 05:41:06
+
+# Manually filter out single detections missed in last filter
+# this removes 17 detections
+
+allData6 <- allData5 %>%
+  filter(!(freqCode == "149.340 002" & station == "2" & dateTime == "2024-08-03 20:24:41" |
+             freqCode == "149.340 002" & station == "2" & dateTime == "2024-08-04 13:31:52")) %>%
+  filter(!(freqCode == "149.340 003" & station == "2" & dateTime == "2024-08-07 15:37:39")) %>%
+  filter(!(freqCode == "149.340 006" & station == "2" & dateTime == "2024-08-09 11:51:46")) %>%
+  filter(!(freqCode == "149.500 018" & station == "2" & dateTime == "2024-07-17 00:44:14")) %>%
+  filter(!(freqCode == "149.500 044" & station == "2" & dateTime == "2024-07-22 07:21:19")) %>%
+  filter(!(freqCode == "149.500 052" & station == "2" & dateTime == "2024-07-28 12:11:36")) %>%
+  filter(!(freqCode == "149.500 058" & station == "2" & dateTime == "2024-07-24 02:21:42")) %>%
+  filter(!(freqCode == "149.500 060" & station == "2" & dateTime == "2024-07-24 12:44:33")) %>%
+  filter(!(freqCode == "149.500 073" & station == "2" & dateTime == "2024-07-28 13:53:23")) %>%
+  filter(!(freqCode == "149.500 016" & station == "2" & date == "2024-07-22")) %>%
+  filter(!(freqCode == "149.500 003" & station == "2" & date == "2024-07-22")) %>%
+  #recalculate lag
+  arrange(dateTime) %>%
+  group_by(freqCode) %>%
+  mutate(lag = as.numeric(difftime(dateTime, lag(dateTime), units = "secs")),
+         distance = abs(rkm - lag(rkm)),
+         lagDays = as.numeric(difftime(dateTime, lag(dateTime), units = "days")),
+         rate = distance/lagDays) %>%
+  ungroup()
+
+
+impossible_rates <- allData6 %>% # 34 fish
+  filter(rate > 60)
+
+#All the rest of the impossible detections appear to be in fact possible 
+# between the morice lake station and atna, nanika and mobile detects. 
+
+# These tags (below) appear to get picked up speratically at station 2, since
+# they are not easily filtered out as they were not observed upstream
+
+# 149 340 001 at 2024-08-13 15:46:46 on
+# 149.340 002 at 2024-08-11 09:22:28 on
+# 149.340 003 at 2024-09-05 14:18:45 on (unclear)
+# 149.340 004 at 2024-08-23 11:13:30 on 
+# 149.340 005 at 2024-09-05 18:40:04 on
+# 149.340 006 between 2024-08-13 15:56:46 & 2024-08-26 17:53:50 and 2024-09-11 20:16:30 on
+# 149.340 008 at 2024-08-22 15:56:00 on
+# 149.340 010 at 2024-09-07 23:39:02 on
+
+# 149.500 019 at 2024-10-05 02:43:46 (once)
+# 149.500 059 at 2024-07-25 06:09:43 (once)
+# 149.500 073 at 2024-07-26 11:05:28 (once)
+
+#Manually remove tags that are unlikely based on detection history plots
+# This removes 503 detections
+
+
+allData7 <- allData6 %>%
+  filter(!(freqCode == "149.340 001" & station == "2" & dateTime >= "2024-08-13 15:46:46")) %>%
+  filter(!(freqCode == "149.340 002" & station == "2" & dateTime >= "2024-08-11 09:22:28")) %>%
+  filter(!(freqCode == "149.340 003" & station == "2" & dateTime >= "2024-09-05 14:18:45")) %>%
+  filter(!(freqCode == "149.340 004" & station == "2" & dateTime >= "2024-08-23 11:13:30")) %>%
+  filter(!(freqCode == "149.340 005" & station == "2" & dateTime >= "2024-09-05 18:40:04")) %>%
+  filter(!(freqCode == "149.340 006" & station == "2" & dateTime >= "2024-09-05 21:07:51")) %>%
+  filter(!(freqCode == "149.340 008" & station == "2" & dateTime >= "2024-08-22 15:56:00")) %>%
+  filter(!(freqCode == "149.340 010" & station == "2" & dateTime >= "2024-09-07 23:39:02")) %>%
+  filter(!(freqCode == "149.500 019" & station == "2" & dateTime == "2024-10-05 02:43:46")) %>%
+  filter(!(freqCode == "149.500 059" & station == "2" & dateTime == "2024-07-25 06:09:43")) %>%
+  filter(!(freqCode == "149.500 073" & station == "2" & dateTime == "2024-07-26 11:05:28")) %>%
+  
+  
+  #recalculate lag
+  arrange(dateTime) %>%
+  group_by(freqCode) %>%
+  mutate(lag = as.numeric(difftime(dateTime, lag(dateTime), units = "secs")),
+         distance = abs(rkm - lag(rkm)),
+         lagDays = as.numeric(difftime(dateTime, lag(dateTime), units = "days")),
+         rate = distance/lagDays) %>%
+  ungroup()
+
+
+
+impossible_rates <- allData7 %>% # 34 fish
+  filter(rate > 60)
+
+
+# Now let's see how many detections there were per tag at the morice lake outlet
+moriceLakeOutlet <- allData7 %>% 
+  filter(rkm == 201) %>% count(freqCode)
+# Didn't use this info for filtering, but maybe we should?
+# Here are some notes:
+# tag 149.320 116 detected one time - looks legit.
+# tag 149.500 046 detected one time - looks legit.
+# tag 149.500 058 detected one time - looks legit.
+
+
 # Finally, only use mobile detections with the maximum
 # power for each tag and for each survey.
-## this removes 91 detections
-allData6 <- allData5 %>%
+# this removes 131 detections
+
+allData8 <- allData7 %>% # 414468 detections
   group_by(freqCode, date) %>%
   filter(!(method == "Mobile" & power < max(power)))
 
+
+#Now make it so that that lost tags only get 1 point for its first lost detection
+# this removes 93577 detections
+
+allData9 <- allData8 %>% # 414468 detections
+  arrange(freqCode, dateTime) %>%
+  group_by(freqCode) %>%
+  mutate(
+    lost_tag_time = if (any(method == "Lost Tag")) min(dateTime[method == "Lost Tag"], na.rm = TRUE) else as.POSIXct(NA),
+    keep_row = method != "Lost Tag" | dateTime == lost_tag_time
+  ) %>%
+  filter(keep_row) %>%
+  select(-lost_tag_time, -keep_row) %>%
+  ungroup()
 
 
 # Write Out Data --------------------------------------------------------------
 
 # Write out cleaned data for plotting, mapping, and summarizing results
-write.csv(allData6, 
-          file = "Data Output/099_AllData_FinalCleaned_2023.csv")
+write.csv(allData9, 
+          file = "Data Output/099_AllData_FinalCleaned_2024.csv")
 
 
