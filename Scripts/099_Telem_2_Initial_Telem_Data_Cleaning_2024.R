@@ -339,14 +339,28 @@ mobileDataCleanedLagTimes <- mobileDataCleaned %>%
   arrange(dateTime) %>%
   group_by(freqCode) %>%
   mutate(lag = difftime(dateTime, lag(dateTime), units = "secs"))
-# 13s tags
+
+fishDeath <- mobileDataCleanedLagTimes %>%
+  filter(lag == 13 | lag == 26)  %>%
+  dplyr::select(!(lag)) %>%
+  summarize(unique_freqCode = n_distinct(freqCode)            ,
+            earliestDate = min(dateTime))
+
+
+# 13s tags (fish death)
 # 149.500 008 at 2024-10-01 17:58:23
 # 149.500 025 at 2024-10-01 17:59:17 (2x)
 
-#26s tags
+#26s tags (fish death)
 # 149.500 071 at 2024-10-01 19:29:55
 # 149.500 033 at 2024-10-01 19:38:50
+# 149.500 034
 # 149.500 038 at 2024-10-01 19:30:59
+# 149.500 014 at 2024-10-01 19:32:21
+
+write.csv(fishDeath, 
+          file = "Data Output/099_fishDeath_2024.csv")
+
 
 fixedDataCleanedLagTimes <- fixedDataCleaned %>%
   arrange(dateTime) %>%
@@ -364,7 +378,7 @@ lostTags <- fixedDataCleanedLagTimes %>%
 #I am going to look at the fixed data to see if they are seen upstream and 
 #determine whether they are lost (or dead) or alive fish.
 #alive
-#	149.320 127 seen upstream
+#	149.320 127 seen upstream (S2)
 # 149.340 001 seen upstream (S2)
 # 149.340 002 seen upstream (S2)
 # 149.340 003 seen upstream (S2)
@@ -379,10 +393,10 @@ lostTags <- fixedDataCleanedLagTimes %>%
 # 149.500 071 seen upstream (S4 Nanika)
 
 
-
 #lost (dead)
-#149.320 146
-#149.500 100 only seen at S2 since 2024-08-27
+#149.320 146 only seen at S2 2024-08-24 10:10:14
+#149.500 100 only seen at S2 since 2024-07-31 10:50:28
+
 
 
 write.csv(lostTags, 
