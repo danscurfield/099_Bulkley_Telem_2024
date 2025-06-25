@@ -41,7 +41,8 @@ plotData <- read.csv("Data Output/099_AllData_FinalCleaned_2024.csv",
          location = as.character(location)) %>%
   mutate(freqCode = ifelse(str_length(str_extract(freqCode, "\\d+$")) == 2,
                          str_replace(freqCode, "(\\s)(\\d{2}$)", "\\10\\2"),
-                         freqCode))
+                         freqCode)) %>%
+  arrange(freqCode)
 
 
 

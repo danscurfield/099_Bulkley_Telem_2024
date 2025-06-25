@@ -62,7 +62,7 @@ tagData <- read_csv("Data Input/tagData.csv") %>%
          dateTime = tagDateTime,
          code = sub(".* ", "", freqCode),
          rkm = 0,
-         waterbody = "Tagging",
+         waterbody = "Bulkley River",
          method = "Tagging",
          station = "Tagging",
          power = NA, 
@@ -164,7 +164,7 @@ fishDeath <- read.csv("Data Output/099_fishDeath_2024.csv",
 
 # This removes 616 detections.
 
-allData <- rbind(fixedDataCleaned, mobileDataCleaned, tagData) %>% #466078 detections
+allData <- rbind(fixedDataCleaned, mobileDataCleaned, tagData) %>% #465462 detections
   #add lost tags
   left_join(lostTags, by = "freqCode", suffix = c("", "_lost")) %>%
   mutate(method = case_when(
@@ -184,6 +184,7 @@ allData <- rbind(fixedDataCleaned, mobileDataCleaned, tagData) %>% #466078 detec
   #remove irregular tag data
   filter((lag >= 5 | is.na(lag))) %>% # is.na(lag) keeps the tagging data since those don't have a previous detection. 465462 detections
   ungroup() 
+
 
 #remove unneeded df's
 rm(fishDeath, lostTags, fixedDataCleaned, mobileDataCleaned, tagData)
@@ -344,7 +345,7 @@ allData5 <- allData4 %>%
   mutate(row_id = row_number(),
          max_row = max(row_id)) %>%
   filter(!(row_id == max_row & station == "2" & lag > 360)) %>%
-  select(-row_id, -max_row) %>%
+  dplyr::select(-row_id, -max_row) %>%
   #recalculate lag
   arrange(dateTime) %>%
   group_by(freqCode) %>%
@@ -487,8 +488,19 @@ allData9 <- allData8 %>% # 414468 detections
     keep_row = method != "Lost Tag" | dateTime == lost_tag_time
   ) %>%
   filter(keep_row) %>%
-  select(-lost_tag_time, -keep_row) %>%
+  dplyr::select(-lost_tag_time, -keep_row) %>%
   ungroup()
+
+#Lots of noise on station 2
+#lets see how many detections were removed
+
+n_allData <- allData %>% #304696
+  filter(station == "2") %>%
+  nrow()
+
+n_allData9 <- allData9 %>% #22799
+  filter(station == "2") %>%
+  nrow()
 
 
 # Write Out Data --------------------------------------------------------------

@@ -83,6 +83,80 @@ tagData %>% group_by(sex) %>%
             maxFL = max(forkLength, na.rm = TRUE),
             sdFL = sd(forkLength, na.rm = TRUE))
 
+tagData2021 <- read_csv("Data Input/099_Tag_Metadata_2021.csv") %>%
+  mutate(date = as.character(date),
+         time = as.character(time),
+         forkLength = as.numeric(forkLength)) %>%
+  dplyr::select(date, time, sex, forkLength)
+
+tagData2022 <- read_csv("Data Input/099_Tag_Metadata_2022.csv") %>%
+  mutate(date = as.character(date),
+         time = as.character(time),
+         forkLength = as.numeric(forkLength)) %>%
+  dplyr::select(date, time, sex, forkLength)
+
+tagData2023 <- read_csv("Data Input/099_Tag_Metadata_2023.csv") %>%
+  mutate(date = as.character(date),
+         time = as.character(time),
+         forkLength = as.numeric(forkLength)) %>%
+  dplyr::select(date, time, sex, forkLength)
+
+tagDataAllYears <- bind_rows(tagData2021, tagData2022, tagData2023) %>%
+  mutate(sex = toupper(sex)) %>%
+  mutate(sex = na_if(sex, "UNKNOWN"))
+
+tagDataAllYears %>% group_by(sex) %>%
+  summarise(n = n(),
+            meanFL = mean(forkLength, na.rm = TRUE),
+            medianFL = median(forkLength, na.rm = TRUE),
+            minFL = min(forkLength, na.rm = TRUE),
+            maxFL = max(forkLength, na.rm = TRUE),
+            sdFL = sd(forkLength, na.rm = TRUE))
+
+# tags put out per week -------------------------------------------------------
+
+tagSummaryByWeek <- tagData %>%
+  mutate(tagDate = as.Date(tagDateTime)) %>%
+  mutate(week_start = cut(tagDate,
+                          breaks = seq(ymd("2024-07-01"), max(tagDate) + 7, by = "1 week"),
+                          right = FALSE,
+                          labels = FALSE)) %>%
+  mutate(week_start_date = ymd("2024-07-01") + weeks(week_start - 1)) %>%
+  group_by(week_start_date) %>%
+  summarise(n = n(), .groups = "drop")
+
+tagByWeekPlot <- tagSummaryByWeek %>%
+  ggplot(aes(x = week_start_date, y = n)) +
+  geom_col(color = "black", fill ="#104692") +
+  scale_x_date(limits = c(ymd("2024-07-01"), ymd("2024-09-08")),
+               date_labels = "%b %d") +
+  labs(x = "Week", y = "Sockeye Tagged") +
+  theme_minimal()
+
+tagByWeekPlot <- tagSummaryByWeek %>%
+  mutate(week_center = week_start_date + as.difftime(3.5, units = "days")) %>%
+  ggplot(aes(x = week_center, y = n)) +
+  geom_col(width = 7, color = "black", fill = "#104692") +
+  scale_x_date(
+    limits = c(ymd("2024-07-01"), ymd("2024-09-08")),
+    date_labels = "%b %d",
+    date_breaks = "7 days",
+    expand = expansion(mult = c(0, 0.01))
+  ) +
+  labs(x = "Week", y = "Sockeye Tagged") +
+  ylim(0, 75) +
+  scale_fill_ifr() +
+  theme_ifr() +
+  theme(legend.position = "none")
+
+tagByWeekPlot
+
+ggsave(plot = tagByWeekPlot,
+       "99_tagByWeekPlot_2024.png",
+       path = "Figures and Tables/",
+       height = 4, width = 6.5, units = "in", dpi = 600)
+
+
 # Plot Data -------------------------------------------------------------------
 
 # We'll make two plots for male and female instead of faceting and stack them

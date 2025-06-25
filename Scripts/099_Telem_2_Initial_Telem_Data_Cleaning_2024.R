@@ -186,6 +186,16 @@ station4 <- uploadOrion(path = "Data Input/Radio Downloads/Station4") #2024-07-0
 station5 <- uploadOrion(path = "Data Input/Radio Downloads/Station5") #2024-07-05 to 2024-08-12 - data gap
 station6 <- uploadOrion(path = "Data Input/Radio Downloads/Station6") #2024-07-05 to 2024-09-27 
 
+#check false detects at station 2
+station2clean <- station2 %>%
+  filter(!(freqCode == "149.500 212")) %>% #remove test tag 212
+  filter(!(freqCode == "149.500 211")) %>% #remove test tag 211
+  filter(!(date <= "2024-07-03"))%>% 
+  left_join(tagData, by = "freqCode", relationship = "many-to-many")  %>%
+  filter(!(is.na(tagDateTime))) %>% 
+  filter(dateTime > tagDateTime)
+  
+
 #Error in the data discovered
 #There is only one download for station 5 with zero detections: bulkley_station_5_10172024.txt
 #Station 5 data is found in file bulkley_station_1_08122024.txt 2024-07-05 to 2024-08-12

@@ -563,7 +563,7 @@ bulkleyExtent <- data.frame(ylims = c(6020000, 6100900),
 
 ## adjust jitter as needed if points/lables are obstructed
 
-jitter_amount <- 2500
+jitter_amount <- 500
 lastDetections$longjittered <- lastDetections$long + runif(length(lastDetections$long), -jitter_amount, jitter_amount)
 lastDetections$latjittered <- lastDetections$lat + runif(length(lastDetections$lat), -jitter_amount, jitter_amount)
 
@@ -653,7 +653,7 @@ ggsave(bulkleyPlot, file="Figures and Tables/099_LastDetections_BulkleyRiver_202
 
 
 # Set Morice Lake extent
-moriceLakeExtent <- data.frame(ylims = c(5962000, 5999000),
+moriceLakeExtent <- data.frame(ylims = c(5962000, 6007000),
                                xlims = c(575000, 607000))
 
 
@@ -668,9 +668,10 @@ moriceLakePlot <-
                 x = lastDetections$longjittered, 
                 y = lastDetections$latjittered), 
             color = "white", size = 7) +
-  annotate("text", x = 603000, y = 5998500, label = "Morice Lake Outlet\nStation", size = 7) + 
-  annotate("text", x = 605000, y = 5990600, label = "Nanika River\nStation", size = 7) +
+  annotate("text", x = 603000, y = 5999500, label = "Morice Lake Outlet\nStation", size = 7) + 
+  annotate("text", x = 606000, y = 5990600, label = "Nanika River\nStation", size = 7) +
   annotate("text", x = 590400, y = 5985000, label = "Morice Lake", size = 8) +
+  annotate("text", x = 582351, y = 5983321, label = "Atna River\nStation", size = 8) +
   labs(title = "Last Dectections - Morice Lake, Atna Lake and Nanika River") +
   coord_cartesian(xlim = moriceLakeExtent$xlims, ylim = moriceLakeExtent$ylims) + 
   ggsn::scalebar(streamsPlot, 
@@ -688,5 +689,5 @@ moriceLakePlot <-
 #moriceLakePlot
 
 ggsave(moriceLakePlot, file="Figures and Tables/099_LastDetections_MoriceLake_2024.png",
-       width=15, height=15, scale=1) 
+       width=21, height=13, scale=1) 
 
