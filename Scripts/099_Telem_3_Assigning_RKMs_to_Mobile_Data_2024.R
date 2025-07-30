@@ -50,7 +50,7 @@ mobileDataCleaned <- read.csv("Data Output/099_MobileTrackingData_1_InitialClean
 
 # First make a new simplified mobile detection dataframe
 mobileDataPoints <- mobileDataCleaned %>%
-  dplyr::select(detID, latitude, longitude, dateTime, freqCode)
+  dplyr::select(detID, latitude, longitude, dateTime, freqCode, team)
 
 # Turn the data into a spatial points dataframe
 coordinates(mobileDataPoints) <- c("longitude", "latitude")

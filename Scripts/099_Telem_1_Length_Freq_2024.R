@@ -27,7 +27,8 @@ tagData <- read.csv("Data Input/099_2024_TagData.csv",
          freq = Frequency,
          code = Tag.Number,
          sex = Gender,
-         forkLength = Length) %>%
+         forkLength = Length,
+         team = Team) %>%
   mutate(code = sprintf("%03d", code)) %>%
   #Make all sex data upper case
   mutate(sex = str_to_upper(sex)) %>%
@@ -53,7 +54,7 @@ tagData <- read.csv("Data Input/099_2024_TagData.csv",
                                   format="%Y-%m-%d %H:%M"),
          freq = paste("149.", freq, sep = ""),
          freqCode = paste(freq, code, sep = " ")) %>%
-  dplyr::select(tagDateTime, freqCode, sex, forkLength) %>%
+  dplyr::select(tagDateTime, freqCode, sex, forkLength, team) %>%
   # filter out recaptured fish - no recaptured fish in 2024
   #filter out tags with missing data - solved by sleuthing detection data
   #filter out tags not assigned

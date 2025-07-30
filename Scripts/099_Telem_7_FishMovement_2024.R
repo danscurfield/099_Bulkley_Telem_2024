@@ -25,7 +25,7 @@ detData <- read.csv("Data Output/099_AllData_FinalCleaned_2024.csv",
                      header = TRUE, 
                      stringsAsFactors = FALSE) %>%
   # Only use variables we need.
-  dplyr::select(dateTime, date, freqCode, rkm, method, waterbody, station, tagDateTime, sex, forkLength) %>%
+  dplyr::select(dateTime, date, freqCode, rkm, method, waterbody, station, tagDateTime, sex, forkLength, team) %>%
   mutate(dateTime = ymd_hms(dateTime))
 
 tagData <- read_csv("Data Input/tagData.csv") %>%
@@ -41,7 +41,11 @@ tagData <- read_csv("Data Input/tagData.csv") %>%
          longitude = -127.3283,
          latitude = 55.0146) %>%
   dplyr::select(date, tagDateTime, dateTime, freqCode, code, rkm, waterbody, 
-                method, station, power, sex, forkLength, latitude, longitude)  
+                method, station, power, sex, forkLength, latitude, longitude, team) 
+
+detDataUncleaned <- read.csv("Data Output/099_AllData_Uncleaned_2024.csv", 
+                             header = TRUE, 
+                             stringsAsFactors = FALSE)
 
 
 # Detection Efficiency and Accuracy -------------------------------------------
@@ -50,32 +54,54 @@ tagData <- read_csv("Data Input/tagData.csv") %>%
 # to me to calculate det. efficiency.
 
 # Lower Bulkley: Detection Accuracy
-station2detsClean <- detData %>% filter(station == "2") %>% 
-  count(freqCode)
+station2detsClean <- detData %>% filter(station == "2") 
 
-station2dets <- read_csv("Data Output/099_FixedStationData_InitialClean_2024.csv") %>%
+station2dets <- read_csv("Data Output/099_AllData_Uncleaned_2024.csv") %>%
+  filter(station == 2) 
+
+nrow(station2detsClean)/nrow(station2dets)*100 # 1.5% 
+
+## There is obviously some tags that are real getting picked up causing this. 
+## lets find them
+
+detDataUncleaned %>%
   filter(station == 2) %>%
-  count(freqCode)
+  filter(!freqCode %in% tagData$freqCode) %>%
+  count(freqCode, sort = TRUE)
 
-nrow(station2detsClean)/nrow(station2dets)*100 # 77.1%
+## 9 tags have over 10,000 detections, with code 149.320 137 with 578846 
+##(38% of total)detections alone. 
+## I beleive this are live tags not deployed and creating
+## noise and tag collision causing other false detections for other tags.
+
+## how many detections are just tags not deployed
+
+detDataUncleaned %>%
+  filter(station == 2) %>%
+  filter(!freqCode %in% tagData$freqCode) %>%
+nrow()
 
 # Lower Bulkley: Detection Efficietcy
 
 station2dets <- detData %>% filter(rkm == 42) %>% count(freqCode)
 station2USdets <- detData %>% filter(rkm >= 42) %>% count(freqCode)
 
-
 nrow(station2dets)/nrow(station2USdets)*100 # 93.4%
 
+# Lower Bulkley: Missed Tags
+
+nrow(station2USdets)-nrow(station2dets) # 9 tags
+
+
+
 # Morice Lake: Detection Accuracy
-station6detsClean <- detData %>% filter(station == "6") %>% 
-  count(freqCode)
+station6detsClean <- detData %>% filter(station == "6")
 
-station6dets <- read_csv("Data Output/099_FixedStationData_InitialClean_2024.csv") %>%
-  filter(station == 6) %>%
-  count(freqCode)
+station6dets <- read_csv("Data Output/099_AllData_Uncleaned_2024.csv") %>%
+  filter(station == 6) 
 
-nrow(station6detsClean)/nrow(station6dets)*100 # 90.7%
+nrow(station6detsClean)/nrow(station6dets)*100 # 75.5% (old method)
+
 
 #Morice Lake: Detection Efficientcy
 
@@ -84,15 +110,20 @@ station6USdets <- detData %>% filter(rkm >= 201) %>% count(freqCode)
 
 nrow(station6dets)/nrow(station6USdets)*100 # 85.8%
 
+# Morice Lake: Missed Tags
+
+nrow(station6USdets)-nrow(station6dets) # 16 tags
+
+
+
 # Nanika River: Detection Accuracy
-station5detsClean <- detData %>% filter(station == "5") %>% 
-  count(freqCode)
+station4detsClean <- detData %>% filter(station == "4")
 
-station5dets <- read_csv("Data Output/099_FixedStationData_InitialClean_2024.csv") %>%
-  filter(station == 5) %>%
-  count(freqCode)
+station4dets <- read_csv("Data Output/099_AllData_Uncleaned_2024.csv") %>%
+  filter(station == 4)
 
-nrow(station5detsClean)/nrow(station5dets)*100 # 100%
+nrow(station4detsClean)/nrow(station4dets)*100 # 98.7%
+
 
 # Nanika River: Detection Efficientcy
 
@@ -101,41 +132,58 @@ station4USdets <- detData %>% filter(rkm >= 214 & waterbody == "Nanika River") %
 
 nrow(station4dets)/nrow(station4USdets)*100 # 93.4%
 
+# Nanika River: Missed Tags
+
+nrow(station4USdets)-nrow(station4dets) # 5 tags
+
+
+
 # Atna River: Detection Accuracy
-station4detsClean <- detData %>% filter(station == "4") %>% 
-  count(freqCode)
+station5detsClean <- detData %>% filter(station == "5")
 
-station4dets <- read_csv("Data Output/099_FixedStationData_InitialClean_2024.csv") %>%
-  filter(station == 4) %>%
-  count(freqCode)
+station5dets <- read_csv("Data Output/099_AllData_Uncleaned_2024.csv") %>%
+  filter(station == 5)
 
-nrow(station4detsClean)/nrow(station4dets)*100 # 92.1%
+nrow(station5detsClean)/nrow(station5dets)*100 #98.5% 
+
+
 
 # Atna River: Detection Efficientcy
 
-station4dets <- detData %>% filter(rkm == 226.5 & waterbody == "Atna River") %>% count(freqCode)
-station4USdets <- detData %>% filter(rkm >= 226.5 & waterbody == "Atna River") %>% count(freqCode)
+station5dets <- detData %>% filter(rkm == 226.5 & waterbody == "Atna River") %>% count(freqCode)
+station5USdets <- detData %>% filter(rkm >= 226.5 & waterbody == "Atna River") %>% count(freqCode)
 
-nrow(station4dets)/nrow(station4USdets)*100 # 93.1%
+nrow(station5dets)/nrow(station5USdets)*100 # 93.1%
+
+# Atna River: Missed Tags
+
+nrow(station5USdets)-nrow(station5dets) # 2 tags
 
 
 # Fallback: Detection Accuracy
-station1detsClean <- detData %>% filter(station == "1") %>% 
-  count(freqCode)
+station1detsClean <- detData %>% filter(station == "1")
 
-station1dets <- read_csv("Data Output/099_FixedStationData_InitialClean_2024.csv") %>%
+station1dets <- read_csv("Data Output/099_AllData_Uncleaned_2024.csv") %>%
+  filter(station == 1)
+
+nrow(station1detsClean)/nrow(station1dets)*100 #39.4%
+
+## There is obviously some tags that are real getting picked up causing this. 
+## lets find them
+
+detDataUncleaned %>%
   filter(station == 1) %>%
-  count(freqCode)
-
-nrow(station1detsClean)/nrow(station1dets)*100 # 92.1%
+  filter(!freqCode %in% tagData$freqCode) %>%
+  count(freqCode, sort = TRUE)
 
 # Fallback station: Detection Efficientcy (Can't properly calculate)
 # Fish could die, lose tag or go downstream. (easily could be 100%)
 
-station1dets <- detData %>% filter(station >= -0.7) %>% count(freqCode)
 station1USdets <- detData %>% filter(rkm > -0.7) %>% count(freqCode)
 
 nrow(station1dets)/nrow(station1USdets)*100 # 93.1%
+
+
 
 # Clean up workspace
 rm(station1dets, station1USdets,
@@ -150,14 +198,64 @@ rm(station1dets, station1USdets,
 # First let's create a big dataframe of all tagged fish that shows the first detection
 # at each station/waterbody. We'll include this in Appendix A.
 
-fallback <- detData %>% 
+fallback <- detData %>% #80 fish (47% of total)
   filter(station == "1") %>%
   arrange(dateTime) %>%
   group_by(freqCode) %>%
   filter(row_number() ==1) %>%
   mutate(fallbackDate = date(dateTime),
          fallbackHours = round(as.numeric(difftime(dateTime, tagDateTime, units = "hours")),1)) %>%
-  dplyr::select(freqCode, sex, fallbackDate, fallbackHours, station, tagDateTime, forkLength)
+  dplyr::select(freqCode, sex, fallbackDate, fallbackHours, station, tagDateTime, forkLength, team)
+
+  ## 80 fish is alot to fall back. Let's make sure some of this fish are not just
+  ## fish caught be beach seine released below the canyon constriction
+
+    fallback %>%
+      filter(team %in% c("Seine", "Canyon")) %>%
+      ungroup() %>%
+      count(team)
+    #Canyon: 25
+    #Seine: 55
+    
+  ## Lets see how many were tagged at each location?
+    detData %>% 
+      arrange(dateTime) %>%
+      group_by(freqCode) %>%
+      filter(row_number() ==1) %>%
+      filter(team %in% c("Seine", "Canyon")) %>%
+      ungroup() %>%
+      count(team)
+    #Canyon: 100
+    #Seine: 69
+    
+    ## Let's calculate the probability
+    
+    fallback_summary <- tibble(
+      team = c("Canyon", "Seine"),
+      n_total = c(100, 69),
+      n_fallback = c(25, 55)
+    ) %>%
+      mutate(prob_fallback = n_fallback / n_total)
+    
+    fallback_summary <- fallback_summary %>%
+      rowwise() %>%
+      mutate(
+        prob_fallback = n_fallback / n_total,
+        ci = list(binom.test(n_fallback, n_total)$conf.int),
+        ci_lower = ci[[1]],
+        ci_upper = ci[[2]]
+      ) %>%
+      ungroup()
+    
+    fallback_summary %>%
+      ggplot(aes(x = team, y = prob_fallback, fill = team)) +
+      geom_col(width = 0.6) +
+      geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2) +
+      labs(title = "Fallback Detection Probability by Treatment",
+           y = "Probability of Fallback Detection",
+           x = "Treatment") +
+      scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+      theme_minimal()
 
 bulkley <- detData %>% 
   filter(station == "2") %>% #UPDATE - should this be waterbody == "bulkley" "morice"
@@ -430,6 +528,10 @@ moriceLCount <- allDat %>%
   ) %>%
   distinct(freqCode, .keep_all = TRUE) 
 
+moriceLCount<- allDat %>%
+  filter(rkm == 201) %>%
+  distinct(freqCode, .keep_all = TRUE) 
+
 #98 fish at morice lake outley station (58.0%)
 #98 fish after including mobile (58.0%)
 
@@ -482,6 +584,15 @@ spawnerCounts <- bind_rows(upperBulkleyCount, moriceLCount, atnaRCount, nanikaRC
 # 0 in upper bulkley
 
 
+###### Residence time in Nanika ####
+
+#These fish were detected with death signal in Nanika.
+# 149.500 071
+# 149.500 038
+# 149.500 033
+# 149.500 014
+
+
 
 
 
@@ -503,6 +614,10 @@ meanSummaryTable <- summaryTable %>%
   
   summarise(meanFallbackHours = round(mean(fallbackHours, na.rm = TRUE),1),
             sdFallbackHours = round(sd(fallbackHours, na.rm = TRUE),1),
+            meanBulkleyDays_fallbackOnly = round(mean(ifelse(fallbackHours > 0, bulkleyDays, NA), na.rm = TRUE), 1),
+            sdBulkleyDays_noFallback = round(sd(ifelse(fallbackHours == 0, bulkleyDays, NA), na.rm = TRUE), 1),
+            meanBulkleyDays_noFallback = round(mean(ifelse(is.na(fallbackHours), bulkleyDays, NA), na.rm = TRUE), 1),
+            sdBulkleyDays_noFallback = round(sd(ifelse(is.na(fallbackHours), bulkleyDays, NA), na.rm = TRUE), 1),
             meanbulkleyDays = round(mean(bulkleyDays, na.rm = TRUE),1),
             sdbulkleyDays = round(sd(bulkleyDays, na.rm = TRUE),1),
             meanMoriceLakeDays = round(mean(moriceLakeDays, na.rm = TRUE),1),

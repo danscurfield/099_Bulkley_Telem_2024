@@ -186,16 +186,6 @@ station4 <- uploadOrion(path = "Data Input/Radio Downloads/Station4") #2024-07-0
 station5 <- uploadOrion(path = "Data Input/Radio Downloads/Station5") #2024-07-05 to 2024-08-12 - data gap
 station6 <- uploadOrion(path = "Data Input/Radio Downloads/Station6") #2024-07-05 to 2024-09-27 
 
-#check false detects at station 2
-station2clean <- station2 %>%
-  filter(!(freqCode == "149.500 212")) %>% #remove test tag 212
-  filter(!(freqCode == "149.500 211")) %>% #remove test tag 211
-  filter(!(date <= "2024-07-03"))%>% 
-  left_join(tagData, by = "freqCode", relationship = "many-to-many")  %>%
-  filter(!(is.na(tagDateTime))) %>% 
-  filter(dateTime > tagDateTime)
-  
-
 #Error in the data discovered
 #There is only one download for station 5 with zero detections: bulkley_station_5_10172024.txt
 #Station 5 data is found in file bulkley_station_1_08122024.txt 2024-07-05 to 2024-08-12
@@ -221,13 +211,16 @@ station2clean <- station2 %>%
 #149.340 009
 #149.340 010
 
+# Fixed Station Initial Data Filtering ------------------------------------------------
+
 # Bind and format to match mobile data
 ## Remove test tag data to not skew detection accuracy calculation
 
-fixedData <- rbind(station1, station2, station4, station5, station6) %>%
+fixedDat0 <- rbind(station1, station2, station4, station5, station6) %>%
   filter(!(freqCode == "149.500 212")) %>% #remove test tag 212
   filter(!(freqCode == "149.500 211")) %>% #remove test tag 211
   filter(!(date <= "2024-07-03")) %>%
+  left_join(tagData, by = "freqCode", relationship = "many-to-many")  %>%
   mutate(waterbody = case_when(station == "1" ~ "Bulkley River",
                               station == "2" ~ "Bulkley River",
                               station == "4" ~ "Nanika River",
@@ -241,24 +234,39 @@ fixedData <- rbind(station1, station2, station4, station5, station6) %>%
                          station == "6" ~ 201),
          method = "Fixed")
 
-fixedData %>%
+
+#clean tags before deployment
+fixedDat1 <- fixedDat0 %>%
+  filter(is.na(tagDateTime) | dateTime > tagDateTime) # Remove detections before tag date and time - 465,634 detections
+
+#write out uncleaned fixed data
+
+write.csv(fixedDat1, 
+          file = "Data Output/099_FixedStationData_2024.csv")
+
+#clean tags not in study
+fixedDat2 <- fixedDat1 %>%
+  filter(!(is.na(tagDateTime))) # Remove detections with no tag info - 474,942 detections
+
+#check tags picked up before and  after cleaning
+
+fixedDat0 %>% #Before: 604 tags
   distinct(freqCode)
+
+fixedDat2 %>% #After: 168 tags (correct)
+  distinct(freqCode)
+
+fixedData <- fixedDat1
+
+fixedDataCleaned <- fixedDat2
 
 #remove unneeded items from environment
 rm(station1, station2, station6, station5, station4)
 
 
-# Fixed Station Data Filtering ------------------------------------------------
-fixedDataCleaned <- fixedData %>% #Started with 1,687,017 detections
-  left_join(tagData, by = "freqCode", relationship = "many-to-many")  %>%
-  filter(!(is.na(tagDateTime))) %>% # Remove detections with no tag info - 474,942 detections
-  filter(dateTime > tagDateTime) # Remove detections before tag date and time - 465,634 detections
-
-
-
 # Write out csv of initial clean fixed station data.
 # Will combine with mobile data after rkms are assigned and cleaned further.
-write.csv(fixedDataCleaned, 
+write.csv(fixedDat2, 
           file = "Data Output/099_FixedStationData_InitialClean_2024.csv")
 
 
@@ -268,52 +276,79 @@ write.csv(fixedDataCleaned,
 
 mobileDat0 <- mobileData %>% # Started with 563 detections
   left_join(tagData, by = "freqCode", relationship = "many-to-many")  %>%
-  # mutate(dateTime = as.POSIXct(date),
-  #        tagDateTime = as.POSIXct(tagDateTime)) %>%
   filter(!(freqCode == "149.500 211")) %>% #removed test tag - 304 detections
-  filter(!(is.na(tagDateTime))) %>% # Remove detections with no tag info - 275 detections
-  filter(dateTime >= tagDateTime) %>% # Remove detections before tag date and time (none) - 275 detections
+  filter(!(freqCode == "149.500 212")) %>%
   #filter(!(is.na(lat))) %>% # Remove detections with no lat, long. Down to 1080
   arrange(dateTime, freqCode) %>%
   mutate(dateTime = as.POSIXct(dateTime)) %>%
-  # filter(!(freqCode == lag(freqCode) & dateTime == lag(dateTime))) %>% # Remove repeated detections. Down to 659
   dplyr::select(-c("date", "file")) #Remove date and file column
 
+
+mobileDat1 <- mobileDat0 %>%
+  filter(is.na(tagDateTime) | dateTime > tagDateTime) # Remove detections before tag date and time - 0 detections
+
+#write out mobile data
+write.csv(mobileDat1, 
+          file = "Data Output/099_MobileTrackingData_2024.csv")
 #second clean
 ##include lat/long for detections with NA's by assigning nearest values in time
 
-# Create a separate table with known lat/lon
-known_locs <- mobileDat0 %>%
-  filter(!is.na(latitude) & !is.na(longitude)) %>%
-  select(dateTime, latitude, longitude)
+  # Create a separate table with known lat/lon
 
-# Helper function to find nearest known location
+known_locs <- mobileDat1 %>%
+  filter(!is.na(latitude) & !is.na(longitude)) %>%
+  dplyr::select(dateTime, latitude, longitude)
+
+  #assign nearest lat long by time
+
 get_nearest_location <- function(dt, known_locs) {
-  # Find the row in known_df with minimum time difference
+  if (nrow(known_locs) == 0) return(tibble(latitude = NA_real_, longitude = NA_real_))
+  
   nearest <- known_locs %>%
     slice(which.min(abs(difftime(dateTime, dt, units = "secs"))))
-  return(nearest %>% select(latitude, longitude))
+  
+  return(nearest %>% dplyr::select(latitude, longitude))
 }
 
-mobileDat1 <- mobileDat0 %>%
+mobileDat2 <- mobileDat1 %>%
+  as_tibble() %>%
   rowwise() %>%
   mutate(
-    nearest = if (is.na(latitude) | is.na(longitude)) list(get_nearest_location(dateTime, known_locs)) else list(NULL),
+    nearest = if (is.na(latitude) | is.na(longitude)) {
+      get_nearest_location(dateTime, known_locs)
+    } else {
+      tibble(latitude = latitude, longitude = longitude)
+    },
     latitude = if (is.na(latitude)) nearest$latitude else latitude,
     longitude = if (is.na(longitude)) nearest$longitude else longitude
   ) %>%
   ungroup() %>%
-  select(-nearest)
+  dplyr::select(-nearest)
 
-mobileDataCleaned <- mobileDat1
+#third clean
+#remove detections with no tag info
+
+mobileDat3 <- mobileDat2 %>%
+  filter(!(is.na(tagDateTime))) # Remove detections with no tag info - 29 detections
+  
+#check tags picked up before and  after cleaning
+
+mobileDat0 %>% #Before: 90 tags
+  distinct(freqCode)
+
+mobileDat3 %>% #After: 82 tags
+  distinct(freqCode)
+
+
+mobileDataCleaned <- mobileDat3
 
 #remove unneeded items in environment
-rm(known_locs, mobileDat0, mobileDat1)
+rm(known_locs, mobileDat0, mobileDat1, mobileDat2)
 
 
 # Write out csv of cleaned mobile tracking data
 # Will assign rkms, combine with fixed station data, and clean further.
-write.csv(mobileDataCleaned, 
+write.csv(mobileDat3, 
           file = "Data Output/099_MobileTrackingData_1_InitialClean_2024.csv")
 
 
@@ -325,17 +360,17 @@ write.csv(mobileDataCleaned,
 fixedData %>%
   count(station)
 
-# Lower Bulkley
-fixedDataCleaned %>% filter(station == "1") %>% count() # 33324 remaining of 40170 (83.0%); so 17.0% removed.
+# fallback
+fixedDat1 %>% filter(station == "1") %>% count() # 36119 remaining of 40170 (89.9%); so 10.1% or 4051 removed.
 
 # Lower Bulkley
-fixedDataCleaned %>% filter(station == "2") %>% count() # 305290 remaining of 1513306 (20.2%); so 79.8% removed.
+fixedDat1 %>% filter(station == "2") %>% count() # 1508116 remaining of 1513306 (99.7%); so 0.3% or 5190 removed.
 
 # Morice Lake Outlet
-fixedDataCleaned %>% filter(station == "6") %>% count() # 64286 remaining of 70059 (91.8%); so 8.2% removed.
+fixedDat1 %>% filter(station == "6") %>% count() # 70006 remaining of 70059 (99.9%); so 0.1% or 53 removed.
 
 # Nanika River
-fixedDataCleaned %>% filter(station == "4") %>% count() # 61682 remaining of 62402 (98.8); so 1.2% removed.
+fixedDat1 %>% filter(station == "4") %>% count() # 62400 remaining of  62402 (98.8); so 1.2% removed.
 
 # Atna River
 fixedDataCleaned %>% filter(station == "5") %>% count() # 1052  remaining of 1080 (97.4%); so 2.6% removed.

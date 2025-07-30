@@ -23,6 +23,16 @@ options(scipen = 999)
 # Read In Data ----------------------------------------------------------------
 
 # Read in mobile filtered telemetry data. 
+mobileData <- read.csv("Data Output/099_MobileTrackingData_2024.csv", 
+                              header = TRUE, 
+                              stringsAsFactors = FALSE) %>%
+  mutate(date = as_date(dateTime),
+         dateTime = ymd_hms(dateTime),
+         tagDateTime = as.POSIXct(tagDateTime),
+         method = "Mobile") %>%
+  dplyr::select(-X)
+
+# Read in mobile filtered telemetry data. 
 mobileDataCleaned <- read.csv("Data Output/099_MobileTrackingData_2_InitialClean_RKM_2024.csv", 
                        header = TRUE, 
                        stringsAsFactors = FALSE) %>%
@@ -31,6 +41,26 @@ mobileDataCleaned <- read.csv("Data Output/099_MobileTrackingData_2_InitialClean
          tagDateTime = as.POSIXct(tagDateTime),
          method = "Mobile") %>%
   dplyr::select(-X)
+
+# Read in fixed station data
+fixedData <- read.csv("Data Output/099_FixedStationData_2024.csv", 
+                             header = TRUE, 
+                             stringsAsFactors = FALSE) %>%
+  mutate(date = ymd(date),
+         dateTime = ymd_hms(dateTime),
+         tagDateTime = ymd_hms(paste(tagDateTime, "00:00:00")),
+         station = as.character(station),
+         latitude = case_when(station == "1" ~ 55.01835,
+                              station == "2" ~ 54.78871,
+                              station == "4" ~ 54.04742,
+                              station == "5" ~ 54.014545,
+                              station == "6" ~ 54.10783),
+         longitude = case_when(station == "1" ~ -127.3189,
+                               station == "2" ~ -127.1463,
+                               station == "4" ~ -127.4264,
+                               station == "5" ~ -127.74321,
+                               station == "6" ~ -127.4250)) %>%
+  dplyr::select(-X, -rkm, -waterbody, -file)
 
 # Read in fixed station data
 fixedDataCleaned <- read.csv("Data Output/099_FixedStationData_InitialClean_2024.csv", 
@@ -69,7 +99,7 @@ tagData <- read_csv("Data Input/tagData.csv") %>%
          longitude = -127.3283,
          latitude = 55.0146) %>%
   dplyr::select(date, tagDateTime, dateTime, freqCode, code, rkm, waterbody, 
-                method, station, power, sex, forkLength, latitude, longitude)
+                method, station, power, sex, forkLength, latitude, longitude, team)
 #filter out recapture fish (none)
 #filter out fish with missing data (none)
 
@@ -157,6 +187,9 @@ fishDeath <- read.csv("Data Output/099_fishDeath_2024.csv",
 # Additional Filtering --------------------------------------------------------
 
 # Step One: General cleaning
+
+# combine uncleaned data for data accuracy
+allDataUncleaned <- rbind(fixedData, mobileData) #16768013 detections
 
 # First lets join are dataframes together include are lost tags and dead fish
 # Then we will remove erroneous detections where the difference between the 
@@ -509,4 +542,33 @@ n_allData9 <- allData9 %>% #22799
 write.csv(allData9, 
           file = "Data Output/099_AllData_FinalCleaned_2024.csv")
 
+# write out uncleaned combined data for data accuracy and efficiency calculation
+write.csv(allDataUncleaned, 
+          file = "Data Output/099_AllData_Uncleaned_2024.csv")
+
+
+# Get some final cleaning stats -----------------------------------------------
+
+allDataFinal <- read_csv("Data Output/099_AllData_FinalCleaned_2024.csv")
+
+
+#fallback final count
+sum(allDataFinal$station == 1, na.rm = TRUE) #14223 detections of 36119
+#25947 removed
+
+#lower bulkley final count
+sum(allDataFinal$station == 2, na.rm = TRUE) #22799 detections of 1508116
+#1490507 removed
+
+#morice lake final count
+sum(allDataFinal$station == 6, na.rm = TRUE) #52848 detections of 70006
+#17211 removed
+
+#nanika river final count
+sum(allDataFinal$station == 4, na.rm = TRUE) #61638 detection of 62400
+#764 removed
+
+#atna river final count
+sum(allDataFinal$station == 5, na.rm = TRUE) #1052 detection of 1068
+#16 removed
 

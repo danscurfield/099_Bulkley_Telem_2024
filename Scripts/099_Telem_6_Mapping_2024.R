@@ -137,11 +137,12 @@ studyArea <-
   annotate("text", x = 612000, y = 6070000, label = "Smithers", size = 12) +  annotate("text", x = 649500, y = 6025880, label = "Houston", size = 10) + 
   annotate("text", x = 590800, y = 5980000, label = "Morice Lake", size = 10) +  annotate("text", x = 624700, y = 6010000, label = "Morice River", size = 10) + 
   annotate("text", x = 613000, y = 6098000, label = "Fallback \nStation", size = 8) +   annotate("text", x = 602000, y = 6097000, label = "Witset\nCanyon", size = 8) +
-  annotate("text", x = 624700, y = 6074700, label = "Lower Bulkley\nStation", size = 8) + annotate("text", x = 603000, y = 6003000, label = "Morice Lake Outlet\nStation", size = 8) + 
+  annotate("text", x = 624700, y = 6074700, label = "Lower Bulkley\nStation", size = 8) + annotate("text", x = 603000, y = 6003000, label = "Morice Lake Outlet\nStation", size = 8) +
   annotate("text", x = 603000, y = 5983500, label = "Nanika River\nStation", size = 8) + annotate("text", x = 582351, y = 5985871, label = "Atna River\nStation", size = 8) +
+  ggsn::north(data = streamsPlot, scale = 0.05, symbol = 3,
+              anchor = c(x = 580000, y = 5965000))+
+  ggsn::scalebar(streamsPlot, dist = 10, dist_unit = "km", st.size = 10, height = 0.010, transform = FALSE, anchor = c(x = 665000, y = 5955000)) + #model = 'WGS84') +
   coord_cartesian(xlim = mapExtent$xlims, ylim = mapExtent$ylims) +
-  ggsn::scalebar(streamsPlot, location = "bottomright", dist = 1, dist_unit = "km", st.size = 3.5, height = 0.015, transform = FALSE) + #model = 'WGS84') +
-  ggsn::north(data = streamsPlot, scale = 0.1, symbol = 3) +
   theme_ifr() +
   theme(legend.position = "none", axis.title = element_blank())
 #map
